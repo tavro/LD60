@@ -14,3 +14,28 @@ body {
   background: #111;
   color: #eee;
 }
+
+#crosshair {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  margin: -3px 0 0 -3px;
+  border-radius: 50%;
+  background: #fff;
+  pointer-events: none;
+}
+
+#hud {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  font: 16px/1.2 monospace;
+  text-shadow: 0 1px 2px #000;
+  pointer-events: none;
+}
+
+#hud.alert {
+  color: #f55;
+}
