@@ -1,5 +1,7 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { showMenu, hideMenu } from "./menu/menu.js";
+import { settings } from "./settings.js";
 
 // Room is laid out top-down: +x is right, +z is towards the bottom of the sketch
 const ROOM_WIDTH = 40;
@@ -606,7 +608,34 @@ const keys = new Set();
 
 const MOVE_KEYS = ["KeyW", "KeyA", "KeyS", "KeyD"];
 
+// Menu
+//
+// The world is built and rendered behind the menu from the start, but only runs while playing
+
+let playing = false;
+
+document.querySelector("#play").addEventListener("click", () => {
+    hideMenu();
+    playing = true;
+    renderer.domElement.requestPointerLock();
+});
+
+function openMenu() {
+    playing = false;
+    keys.clear();
+    showMenu();
+}
+
+document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") openMenu();
+});
+// Escape while the mouse is captured only releases it, without the key press reaching the page
+document.addEventListener("pointerlockchange", () => {
+    if (!document.pointerLockElement && playing) openMenu();
+});
+
 window.addEventListener("keydown", (e) => {
+    if (!playing) return;
     if (e.code.startsWith("Arrow")) {
         keys.add(e.code);
         e.preventDefault();
@@ -619,7 +648,7 @@ window.addEventListener("blur", () => keys.clear());
 
 // The first click only captures the mouse; after that left click interacts
 renderer.domElement.addEventListener("mousedown", (e) => {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || !playing) return;
     if (document.pointerLockElement === renderer.domElement) interact();
     else renderer.domElement.requestPointerLock();
 });
@@ -784,6 +813,10 @@ const CROSSFADE = 0.3;
 let musicGains = null;
 let musicRoom = null;
 
+// Master volume from the settings menu
+const musicVolume = audio.createGain();
+musicVolume.connect(audio.destination);
+
 async function loadTrack(url) {
     const response = await fetch(url);
     return audio.decodeAudioData(await response.arrayBuffer());
@@ -806,7 +839,7 @@ async function startMusic() {
 
         const gain = audio.createGain();
         gain.gain.value = 0;
-        source.connect(gain).connect(audio.destination);
+        source.connect(gain).connect(musicVolume);
         source.start(startAt);
         gains[name] = gain;
     });
@@ -833,16 +866,28 @@ function updateMusic() {
     }
 }
 
+function applySettings() {
+    if (musicVolume.gain.value !== settings.volume) musicVolume.gain.value = settings.volume;
+
+    const filter = `brightness(${settings.brightness})`;
+    if (renderer.domElement.style.filter !== filter) renderer.domElement.style.filter = filter;
+}
+
 const timer = new THREE.Timer();
 
 function animate(time) {
     timer.update(time);
     const dt = Math.min(timer.getDelta(), 0.1);
-    updatePlayer(dt);
-    updateTarget();
-    updateTweens(dt);
-    updatePrinter(dt);
+
+    // Still place the camera while paused, so the world shows behind the menu
+    updatePlayer(playing ? dt : 0);
+    if (playing) {
+        updateTarget();
+        updateTweens(dt);
+        updatePrinter(dt);
+    }
     updateMusic();
+    applySettings();
     renderer.render(scene, camera);
 }
 
