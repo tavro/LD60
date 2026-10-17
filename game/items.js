@@ -42,7 +42,7 @@ export function createItemSystem({ scene, camera, player, surfaces, getExtraTarg
     function firstHit(origin, direction, far) {
         raycaster.set(origin, direction);
         raycaster.far = far;
-        const targets = [...surfaces, ...items.filter((item) => item !== held)];
+        const targets = [...surfaces, ...items.filter((item) => item !== held && !item.userData.carrier)];
         targets.push(...getExtraTargets());
         return raycaster.intersectObjects(targets, true)[0];
     }
@@ -130,5 +130,35 @@ export function createItemSystem({ scene, camera, player, surfaces, getExtraTarg
         else if (target) pickUp(target);
     }
 
-    return { addItem, removeItem, firstHit, interact, update: updateTarget };
+    function findShelfItem(shelf, row) {
+        shelf.updateWorldMatrix(true, false);
+        return items.find((item) => {
+            if (item === held || item.userData.carrier || item.userData.kind !== "box" || !item.visible) return false;
+            const local = shelf.worldToLocal(item.getWorldPosition(new THREE.Vector3()));
+            return Math.abs(local.x) <= 1.8 && Math.abs(local.z) <= 0.8 &&
+                Math.abs(local.y - (0.1 + (row - 1) * 1.5)) <= 0.35;
+        });
+    }
+
+    function takeForNPC(item, npc) {
+        if (!items.includes(item) || item === held || item.userData.carrier) return false;
+        setHighlight(item, false);
+        if (target === item) target = null;
+        item.userData.onTaken?.();
+        item.userData.onTaken = null;
+        item.userData.carrier = npc;
+        npc.add(item);
+        item.position.set(0, 2, 1.1);
+        item.rotation.set(0, 0, 0);
+        return true;
+    }
+
+    function placeFromNPC(item, position) {
+        scene.add(item);
+        item.position.copy(position);
+        item.rotation.set(0, 0, 0);
+        delete item.userData.carrier;
+    }
+
+    return { addItem, removeItem, firstHit, interact, update: updateTarget, findShelfItem, takeForNPC, placeFromNPC };
 }

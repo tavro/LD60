@@ -21,8 +21,10 @@ export function createFurniture({ spawn, shelfSlots, restock }) {
     });
 
     // Double-sided shelf island in the middle
+    let firstCustomerShelfLoaded;
     for (const z of [-6, -2, 2, 6]) {
-        spawn("shelf", { x: 3, z, rotation: FACE_LEFT });
+        const shelfLoaded = spawn("shelf", { x: 3, z, rotation: FACE_LEFT });
+        firstCustomerShelfLoaded ??= shelfLoaded;
         spawn("shelf", { x: 5, z, rotation: FACE_RIGHT });
     }
 
@@ -33,7 +35,7 @@ export function createFurniture({ spawn, shelfSlots, restock }) {
 
     // Desk in the bottom right corner: counter along the room side, with two legs reaching towards the
     // right wall and a gap between them to stand in. Leaves a walkway to the walls behind it
-    spawn("desk", {
+    const counterLoaded = spawn("desk", {
         x: 15.25,
         z: 7.25,
         rotation: -Math.PI / 2,
@@ -44,5 +46,5 @@ export function createFurniture({ spawn, shelfSlots, restock }) {
         ],
     });
 
-    return { printerLoaded };
+    return { printerLoaded, firstCustomerShelfLoaded, counterLoaded };
 }

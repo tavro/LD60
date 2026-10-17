@@ -1,6 +1,6 @@
 import { showMenu, hideMenu } from "../menu/menu.js";
 
-export function createControls({ renderer, player, interact }) {
+export function createControls({ renderer, player, interact, onPause = () => {} }) {
     const { keys, moveKeys: MOVE_KEYS } = player;
 
     // Menu
@@ -18,6 +18,7 @@ export function createControls({ renderer, player, interact }) {
     function openMenu() {
         playing = false;
         keys.clear();
+        onPause();
         showMenu();
     }
 
@@ -31,10 +32,7 @@ export function createControls({ renderer, player, interact }) {
 
     window.addEventListener("keydown", (e) => {
         if (!playing) return;
-        if (e.code.startsWith("Arrow")) {
-            keys.add(e.code);
-            e.preventDefault();
-        } else if (MOVE_KEYS.includes(e.code)) {
+        if (MOVE_KEYS.includes(e.code)) {
             keys.add(e.code);
         }
     });
