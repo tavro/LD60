@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { playSfx } from "./sfx.js";
 import { HELD_LAYER } from "../scene/rendering.js";
+import { stockFor } from "./stock.js";
 
 export function createItemSystem({
     scene, camera, player, surfaces, slots, physics, collides, getExtraTargets, onDrop, onMopUse, onUse, onGive,
@@ -240,16 +241,30 @@ export function createItemSystem({
         return firstHit(above, DOWN, Infinity) ?? { point: new THREE.Vector3(above.x, 0, above.z) };
     }
 
+    function blockedRestock(landed) {
+        if (!landed || held.userData.kind !== "box") return false;
+        let shelf = landed.object;
+        while (shelf && !shelf.userData.stock) shelf = shelf.parent;
+        if (!landed.slot && !shelf) return false;
+        const stock = stockFor(held.userData.label);
+        return !stock || held.userData.tagPrice !== stock.price;
+    }
+
     function drop() {
+        const aimed = lookHit();
+        const style = dropStyle(aimed);
+        // Validate before releasing the item, so an incorrect price keeps it in the player's hand.
+        const landed = style === "throw" ? null : landing();
+        if (blockedRestock(landed)) {
+            ghost.material.color.setHex(0xff3333);
+            playSfx("electricError");
+            return;
+        }
         if (held.userData.kind === "paper" || held.userData.kind === "print") {
             playSfx("paper");
         } else {
             playSfx("drop");
         }
-        const aimed = lookHit();
-        const style = dropStyle(aimed);
-        // Worked out while still holding the item, since where it lands depends on what it is
-        const landed = style === "throw" ? null : landing();
         const item = held;
         held = null;
         drawOnTop(item, false);
@@ -351,7 +366,9 @@ export function createItemSystem({
     function updateGhost() {
         ghost.visible = held !== null && held.userData.kind !== "mop" && dropStyle(lookHit()) !== "throw";
         if (!ghost.visible) return;
-        const { point, rotation = player.yaw } = landing();
+        const landed = landing();
+        const { point, rotation = player.yaw } = landed;
+        ghost.material.color.setHex(blockedRestock(landed) ? 0xff3333 : 0xffffff);
         ghost.position.copy(point);
         ghost.rotation.set(0, rotation, 0);
         ghost.scale.copy(heldSize);
