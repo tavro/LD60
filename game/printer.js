@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { settings } from "../settings.js";
-import { W, D, INNER, PARTITION_X } from "../scene/layout.js";
+import { D, INNER, PARTITION_X, STORAGE_LEFT } from "../scene/layout.js";
 import { randomBetween, isPartOf } from "./utils.js";
 import { randomImage } from "./print-images.js";
 import { playSfx } from "./sfx.js";
@@ -45,8 +45,8 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
     const CLEAN_BELOW = 0.3;
 
     // Dropped from above onto whatever is there, so it lands on top if something was left on the spot
-    const CARTRIDGE_SPOT = new THREE.Vector3(-8, 10, -INNER + 0.8);
-    const MOP_SPOT = new THREE.Vector3(-15.5, 0, -INNER + 1);
+    const CARTRIDGE_SPOT = new THREE.Vector3(-7.5, 10, -INNER + 0.8);
+    const MOP_SPOT = new THREE.Vector3(-9.5, 0, -INNER + 1);
 
     const printer = { group: null, ink: 1, leaking: false, leakIn: randomBetween(...LEAK_DELAY) };
     let printJobs = Promise.resolve();
@@ -135,7 +135,7 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
                 const distance = randomBetween(...PAPER_SPREAD);
                 x = printerX + Math.cos(angle) * distance;
                 z = printerZ + Math.sin(angle) * distance;
-            } while (x < -W + 1.5 || x > PARTITION_X - 1.5 || Math.abs(z) > D - 1.5 || collides(x, z));
+            } while (x < STORAGE_LEFT + 1.5 || x > PARTITION_X - 1.5 || Math.abs(z) > D - 1.5 || collides(x, z));
 
             // Each a hair higher than the last, so overlapping sheets don't flicker
             const paper = makePaper();

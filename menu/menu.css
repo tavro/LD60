@@ -17,7 +17,8 @@ canvas {
 .game-menu {
   position: fixed;
   inset: 0;
-  z-index: 1;
+  /* Over the instruction cards and touch controls */
+  z-index: 3;
 
   display: flex;
   align-items: center;

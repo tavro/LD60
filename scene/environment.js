@@ -3,7 +3,7 @@ import { wallMaterial, tileWall } from "./walls.js";
 import { pixelateLighting } from "./lighting.js";
 import {
     ROOM_WIDTH, ROOM_DEPTH, WALL_HEIGHT, WALL_THICKNESS, W, D, PARTITION_X, STORAGE_DOOR, FRONT_DOOR,
-    LIGHT_PANELS,
+    STORAGE_LEFT, LIGHT_PANELS,
 } from "./layout.js";
 
 export function createEnvironment(scene, { surfaces, addSolid }) {
@@ -54,10 +54,10 @@ export function createEnvironment(scene, { surfaces, addSolid }) {
         addSolid(wall);
     }
 
-    addWall(-W, -D, W, -D);
-    addWall(-W, D, FRONT_DOOR.x - FRONT_DOOR.width / 2, D);
+    addWall(STORAGE_LEFT, -D, W, -D);
+    addWall(STORAGE_LEFT, D, FRONT_DOOR.x - FRONT_DOOR.width / 2, D);
     addWall(FRONT_DOOR.x + FRONT_DOOR.width / 2, D, W, D);
-    addWall(-W, -D, -W, D);
+    addWall(STORAGE_LEFT, -D, STORAGE_LEFT, D);
     addWall(W, -D, W, D);
 
     // Partition between the printer/restocking area and the shop floor, with a doorway near the top

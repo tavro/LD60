@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { PIXEL_FONT, pixelCanvasTexture } from "./font.js";
-import { FRONT_DOOR, PARTITION_X, W, D } from "../scene/layout.js";
+import { FRONT_DOOR, PARTITION_X, STORAGE_LEFT, D } from "../scene/layout.js";
 import { STOCK } from "./stock.js";
 
 const MAX_PER_PRODUCT = 4;
@@ -74,7 +74,7 @@ export function createDeliverySystem({ scene, items, physics, placeBox, collides
         const occupied = items.list().map((item) =>
             new THREE.Box3().setFromObject(item).expandByScalar(PRODUCT_RADIUS));
         const positions = [];
-        for (let x = -W + 1.5; x < PARTITION_X - 1; x += SPACING) {
+        for (let x = STORAGE_LEFT + 1.5; x < PARTITION_X - 1; x += SPACING) {
             for (let z = -D + 1.5; z < D - 1; z += SPACING) {
                 const point = new THREE.Vector3(x, 0, z);
                 if (collides(x, z, PRODUCT_RADIUS)) continue;

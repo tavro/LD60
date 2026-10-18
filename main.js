@@ -25,6 +25,7 @@ import { createMesses } from "./game/messes.js";
 import { createPhysics } from "./game/physics.js";
 import { createTutorial } from "./game/tutorial.js";
 import { createBelt } from "./game/belt.js";
+import { forDevice } from "./game/touch.js";
 import { createCustomerController } from "./npc/controller.js";
 import { createNPCSpeech } from "./npc/speech.js";
 import { showShiftPanel, setMenuOptions } from "./menu/menu.js";
@@ -326,7 +327,7 @@ function animate(time) {
             const warning = warningTime > 0 ? `\n${startWarning}` : "";
             const status = preparationError || delivery.message;
             const text = `${retrying ? "RETRYING" : "PREPARING"} DAY ${nextDay}\n${status}${warning}\nClean the shop, then click the glowing red button at the counter to start.`;
-            if (preparationCard.textContent !== text) preparationCard.textContent = text;
+            if (preparationCard.textContent !== forDevice(text)) preparationCard.textContent = forDevice(text);
         }
     }
     shiftButton.update(dt);

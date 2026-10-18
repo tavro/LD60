@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { PARTITION_X } from "../scene/layout.js";
+import { forDevice } from "./touch.js";
 import { STOCK } from "./stock.js";
 
 // Interactive tutorial: a training shift with no clock, where a card at the bottom of the screen
@@ -125,7 +126,7 @@ export function createTutorial({
         card.replaceChildren();
         const progress = document.createElement("small");
         progress.textContent = `TRAINING · ${index + 1} OF ${steps.length}`;
-        card.append(progress, text);
+        card.append(progress, forDevice(text));
     }
 
     function enterStep() {

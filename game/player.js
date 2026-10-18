@@ -18,6 +18,8 @@ export function createPlayer(camera, { collides, bump }) {
     let stepPhase = 0;
     let walking = 0;
     const keys = new Set();
+    // The touch joystick, -1 to 1 each way, with y forward
+    const stick = new THREE.Vector2();
 
     const MOVE_KEYS = ["KeyW", "KeyA", "KeyS", "KeyD"];
 
@@ -34,7 +36,10 @@ export function createPlayer(camera, { collides, bump }) {
         if (keys.has("KeyS")) move.y -= 1;
         if (keys.has("KeyD")) move.x += 1;
         if (keys.has("KeyA")) move.x -= 1;
-        move.normalize().multiplyScalar(MOVE_SPEED * dt);
+        // Keys walk at full speed, and the joystick as far as it's pushed
+        if (stick.lengthSq() > 0) move.copy(stick).clampLength(0, 1);
+        else move.normalize();
+        move.multiplyScalar(MOVE_SPEED * dt);
 
         const sin = Math.sin(player.yaw);
         const cos = Math.cos(player.yaw);
@@ -62,5 +67,5 @@ export function createPlayer(camera, { collides, bump }) {
         camera.rotation.x = player.pitch;
     }
 
-    return { state: player, radius: PLAYER_RADIUS, keys, moveKeys: MOVE_KEYS, look, update: updatePlayer };
+    return { state: player, radius: PLAYER_RADIUS, keys, stick, moveKeys: MOVE_KEYS, look, update: updatePlayer };
 }

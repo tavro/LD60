@@ -1,10 +1,9 @@
-import { W, INNER, WALL_THICKNESS, PARTITION_X } from "./layout.js";
+import { W, INNER, WALL_THICKNESS, PARTITION_X, STORAGE_LEFT } from "./layout.js";
 import * as THREE from "three";
 import { STOCK } from "../game/stock.js";
 import { pixelateLighting } from "./lighting.js";
 
 // Shelves are open on local +Z; rotate that side towards the aisle.
-const FACE_UP = Math.PI;
 const FACE_LEFT = -Math.PI / 2;
 const FACE_RIGHT = Math.PI / 2;
 
@@ -22,7 +21,7 @@ function shuffled(list) {
 }
 
 // The desk's pixel-art look, in pixels PIXEL units across, the size of the light and shadow pixels:
-// a light speckled laminate top, and dark panels PANEL_WIDTH wide around the sides
+// a plain light top, and grey panels PANEL_WIDTH wide around the sides
 const PIXEL = 0.25;
 const PANEL_WIDTH = 4;
 
@@ -47,24 +46,13 @@ function pixelTexture(width, height, paint) {
     return texture;
 }
 
-const shade = (hex, amount) => `#${new THREE.Color(hex).offsetHSL(0, 0, amount).getHexString()}`;
-
-function laminateTexture() {
-    return pixelTexture(16, 16, () => {
-        const roll = Math.random();
-        return roll > 0.9 ? "#9c9a94" : roll > 0.8 ? "#e2dfd8" : shade("#c9c6bf", (Math.random() - 0.5) * 0.02);
-    });
-}
-
-// A panel as tall as the desk, with a lighter edge along the top, a groove down one side and a
-// dark kick plate along the floor
+// A panel as tall as the desk, with a lighter edge along the top and a groove down one side
 function panelTexture(height) {
     const pixels = Math.round(height / PIXEL);
     return pixelTexture(PANEL_WIDTH / PIXEL, pixels, (x, y) => {
         if (y === 0) return "#8a9098";
-        if (y === pixels - 1) return "#3a3e44";
         if (x === 0) return "#4a5057";
-        return shade("#646b74", (Math.random() - 0.5) * 0.03);
+        return "#646b74";
     });
 }
 
@@ -109,7 +97,7 @@ function dressDesk(desk) {
 
         mesh.geometry = geometry;
         mesh.material = [
-            pixelateLighting(new THREE.MeshStandardMaterial({ map: laminateTexture(), roughness: 0.7 })),
+            pixelateLighting(new THREE.MeshStandardMaterial({ color: 0xc9c6bf, roughness: 0.7 })),
             pixelateLighting(new THREE.MeshStandardMaterial({ map: panelTexture(height), roughness: 0.85 })),
         ];
     });
@@ -119,13 +107,12 @@ export function createFurniture({ spawn, shelfSlots, placeBox, spawnShelf }) {
     const PRINTER = { x: -12, z: -INNER + 1.2 };
     const printerLoaded = spawn("printer", PRINTER);
 
-    // Restocking shelf, L-shaped in the bottom left corner, with each shelf holding its own item,
-    // numbered along the L starting from the left wall. They start empty; deliveries must be
-    // unpacked and shelved by the player after shifts.
-    const RESTOCK_SHELVES = [
-        { x: -W + WALL_THICKNESS / 2 + 1, z: 9, rotation: FACE_RIGHT },
-        ...[-16, -12, -8].map((x) => ({ x, z: INNER - 1, rotation: FACE_UP })),
-    ];
+    // Restocking shelves at the bottom of the storage room, each holding its own item: two along the
+    // left wall and two against the partition, facing each other. They're 4 wide and 2 deep, with a
+    // little gap between them. They start empty; deliveries must be unpacked and shelved by the
+    // player after shifts.
+    const RESTOCK_SHELVES = [STORAGE_LEFT + WALL_THICKNESS / 2 + 1, PARTITION_X - WALL_THICKNESS / 2 - 1]
+        .flatMap((x, side) => [4.6, 8.8].map((z) => ({ x, z, rotation: side ? FACE_LEFT : FACE_RIGHT })));
     const storageSlots = RESTOCK_SHELVES.flatMap((shelf, i) => {
         spawnShelf(shelf, STOCK[i]);
         return shelfSlots(shelf).map((slot) => ({ ...slot, stock: STOCK[i] }));

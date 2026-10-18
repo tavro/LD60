@@ -1,5 +1,6 @@
 import { showMenu, hideMenu } from "../menu/menu.js";
 import { playSfx } from "./sfx.js";
+import { createTouchControls, touch } from "./touch.js";
 
 export function createControls({ renderer, player, interact, onPlay = () => {}, onPause = () => {} }) {
     const { keys, moveKeys: MOVE_KEYS } = player;
@@ -17,7 +18,10 @@ export function createControls({ renderer, player, interact, onPlay = () => {}, 
         stopped = false;
         hideMenu();
         playing = true;
-        lockPointer();
+        touchControls.setPlaying(true);
+        touchControls.enterFullscreen();
+        // Touch has no mouse to capture
+        if (!touch.active) lockPointer();
     }
 
     document.querySelector("#play").addEventListener("click", () => {
@@ -29,6 +33,7 @@ export function createControls({ renderer, player, interact, onPlay = () => {}, 
     function stop() {
         stopped = true;
         playing = false;
+        touchControls.setPlaying(false);
         keys.clear();
         onPause();
         if (document.pointerLockElement) document.exitPointerLock();
@@ -37,6 +42,7 @@ export function createControls({ renderer, player, interact, onPlay = () => {}, 
     function openMenu() {
         if (stopped) return;
         playing = false;
+        touchControls.setPlaying(false);
         keys.clear();
         onPause();
         showMenu();
@@ -45,6 +51,12 @@ export function createControls({ renderer, player, interact, onPlay = () => {}, 
     document.addEventListener("keydown", (event) => {
         if (event.key === "Escape") openMenu();
     });
+    // Switching to another app or tab pauses
+    document.addEventListener("visibilitychange", () => {
+        if (document.hidden && playing) openMenu();
+    });
+
+    const touchControls = createTouchControls({ renderer, player, interact, isPlaying: () => playing, openMenu });
     // Escape while the mouse is captured only releases it, without the key press reaching the page
     document.addEventListener("pointerlockchange", () => {
         if (!document.pointerLockElement && playing) openMenu();
@@ -61,7 +73,7 @@ export function createControls({ renderer, player, interact, onPlay = () => {}, 
 
     // The first click only captures the mouse; after that left click interacts
     renderer.domElement.addEventListener("mousedown", (e) => {
-        if (e.button !== 0 || !playing) return;
+        if (e.button !== 0 || !playing || touch.active) return;
         if (document.pointerLockElement === renderer.domElement) interact();
         else lockPointer();
     });

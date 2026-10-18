@@ -1,8 +1,8 @@
 import * as THREE from "three";
 import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 
-// Blocky customers: boxes with small pixel-art textures as skin, with the face, hair and clothing
-// details painted in. Skin, hair and clothes vary, and some customer types (`look`) get a detail:
+// Blocky customers: boxes with small pixel-art textures as skin, in flat colors with only a few
+// details painted in: eyes, mouth and hairline. Skin, hair and clothes vary, and some customer types (`look`) get a detail:
 // a tie for businessmen, grey hair in a bun and glasses for grandmas, a cap for kids, sunglasses and
 // a gold chain for VIPs. Shoplifters look like anyone else on purpose. The walking animation swings
 // the parts named "left-leg", "right-arm" and so on
@@ -25,11 +25,6 @@ const INSET = 0.01;
 
 function pick(list) {
     return list[Math.floor(Math.random() * list.length)];
-}
-
-// The color a little lighter or darker, for pixel-to-pixel variation
-function shade(hex, amount) {
-    return `#${new THREE.Color(hex).offsetHSL(0, 0, (Math.random() - 0.5) * amount).getHexString()}`;
 }
 
 // A box of the given size at the given position, with each face showing a tile: `faces` names them
@@ -95,9 +90,9 @@ function paint({ skinColor, hairColor, shirtHex, trousers, shoes, cap, style, lo
     const ctx = canvas.getContext("2d");
     const hasHair = style !== "bald";
 
-    // A tile of `base` with a little noise, then `details(set)`, where `set(x, y, color)` colors
-    // one of its pixels counted from the top left
-    function tile(name, base, details = () => {}, noise = 0.06) {
+    // A tile of `base`, then `details(set)`, where `set(x, y, color)` colors one of its pixels
+    // counted from the top left
+    function tile(name, base, details = () => {}) {
         const index = TILES.indexOf(name);
         const left = (index % COLUMNS) * PIXELS;
         const top = Math.floor(index / COLUMNS) * PIXELS;
@@ -105,9 +100,8 @@ function paint({ skinColor, hairColor, shirtHex, trousers, shoes, cap, style, lo
             ctx.fillStyle = color;
             ctx.fillRect(left + x, top + y, 1, 1);
         };
-        for (let y = 0; y < PIXELS; y++) {
-            for (let x = 0; x < PIXELS; x++) set(x, y, shade(base, noise));
-        }
+        ctx.fillStyle = base;
+        ctx.fillRect(left, top, PIXELS, PIXELS);
         details(set);
     }
 
@@ -115,7 +109,7 @@ function paint({ skinColor, hairColor, shirtHex, trousers, shoes, cap, style, lo
     tile("shirt", shirtHex);
     tile("trousers", trousers);
     tile("shoes", shoes);
-    tile("hair", hairColor, () => {}, 0.12);
+    tile("hair", hairColor);
     tile("cap", cap ?? shirtHex);
 
     // Torso front: a collar, and the type's detail
@@ -131,25 +125,18 @@ function paint({ skinColor, hairColor, shirtHex, trousers, shoes, cap, style, lo
             }
         } else if (look === "vip") {
             for (const [x, y] of [[1, 0], [2, 1], [3, 2], [4, 2], [5, 1], [6, 0]]) set(x, y, "#e8c040");
-        } else {
-            set(4, 3, shade(shirtHex, 0.3));
-            set(4, 5, shade(shirtHex, 0.3));
         }
     });
 
-    // The face: hair along the top, brows, eyes, nose and mouth, and glasses or sunglasses
+    // The face: hair along the top, eyes and mouth, and glasses or sunglasses
     tile("face", skinColor, (set) => {
         if (hasHair) {
             for (let x = 0; x < PIXELS; x++) set(x, 0, hairColor);
             set(0, 1, hairColor);
             set(7, 1, hairColor);
         }
-        for (const x of [1, 2, 5, 6]) set(x, 2, look === "grandma" ? "#9a9590" : shade(hairColor, 0.1));
-        for (const x of [1, 5]) set(x, 3, "#f6f4ef");
-        for (const x of [2, 6]) set(x, 3, "#1c1c1c");
-        set(3, 4, shade(skinColor, -0.15));
-        set(4, 4, shade(skinColor, -0.15));
-        for (let x = 2; x < 6; x++) set(x, 6, "#7a2a2a");
+        for (const x of [2, 5]) set(x, 3, "#1c1c1c");
+        for (let x = 3; x < 5; x++) set(x, 6, "#7a2a2a");
         if (look === "vip") {
             for (let x = 1; x < 7; x++) set(x, 3, "#111111");
         } else if (look === "grandma") {
@@ -160,13 +147,13 @@ function paint({ skinColor, hairColor, shirtHex, trousers, shoes, cap, style, lo
     // Sides and back of the head: hair down to the ears, or the whole back for long hair
     tile("headSide", skinColor, (set) => {
         if (!hasHair) return;
-        for (let y = 0; y < 3; y++) for (let x = 0; x < PIXELS; x++) set(x, y, shade(hairColor, 0.12));
-        for (let y = 3; y < (style === "long" ? 7 : 5); y++) for (let x = 5; x < PIXELS; x++) set(x, y, shade(hairColor, 0.12));
+        for (let y = 0; y < 3; y++) for (let x = 0; x < PIXELS; x++) set(x, y, hairColor);
+        for (let y = 3; y < (style === "long" ? 7 : 5); y++) for (let x = 5; x < PIXELS; x++) set(x, y, hairColor);
     });
     tile("headBack", hasHair ? hairColor : skinColor, (set) => {
         if (!hasHair || style === "long") return;
-        for (let y = 6; y < PIXELS; y++) for (let x = 0; x < PIXELS; x++) set(x, y, shade(skinColor, 0.06));
-    }, hasHair ? 0.12 : 0.06);
+        for (let y = 6; y < PIXELS; y++) for (let x = 0; x < PIXELS; x++) set(x, y, skinColor);
+    });
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.colorSpace = THREE.SRGBColorSpace;

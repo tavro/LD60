@@ -1,8 +1,9 @@
 import { settings } from "../settings.js";
+import { likelyTouch } from "./touch.js";
 
 // The graphics setting. Each level trades looks for speed: the glow, shadows (and how often they're
 // redrawn), light from the ceiling panels, and how many pixels are rendered. "auto" starts at high
-// and steps down a level whenever the game runs under AUTO_MIN_FPS for a while
+// (medium on phones) and steps down a level whenever the game runs under AUTO_MIN_FPS for a while
 const LEVELS = {
     high: { bloom: true, shadows: true, shadowRate: 20, panels: "all", pixelRatio: 1.5 },
     medium: { bloom: false, shadows: true, shadowRate: 10, panels: "half", pixelRatio: 1 },
@@ -16,7 +17,8 @@ const AUTO_SETTLE = 3;
 
 export function createGraphics({ scene, renderer, composer, bloom, lighting }) {
     let applied = null;
-    let autoLevel = "high";
+    // Phones start a step down
+    let autoLevel = likelyTouch ? "medium" : "high";
     let measured = 0;
     let frames = 0;
     let settle = AUTO_SETTLE;
