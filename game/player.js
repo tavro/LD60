@@ -6,7 +6,8 @@ export function createPlayer(camera, { collides }) {
     const MOVE_SPEED = 8;
     const MOUSE_SENSITIVITY = 0.002;
     const MAX_PITCH = 1.4;
-    const player = { x: 10, z: 10, yaw: 0, pitch: 0 };
+    // Starts behind the counter, facing the shop
+    const player = { x: 16.25, z: 8.25, yaw: Math.PI / 2, pitch: 0 };
     const keys = new Set();
 
     const MOVE_KEYS = ["KeyW", "KeyA", "KeyS", "KeyD"];
@@ -31,8 +32,8 @@ export function createPlayer(camera, { collides }) {
         const dz = -cos * move.y - sin * move.x;
 
         // Resolve each axis separately so the player slides along walls instead of sticking
-        if (!collides(player.x + dx, player.z, PLAYER_RADIUS)) player.x += dx;
-        if (!collides(player.x, player.z + dz, PLAYER_RADIUS)) player.z += dz;
+        if (!collides(player.x + dx, player.z, PLAYER_RADIUS, { player: true })) player.x += dx;
+        if (!collides(player.x, player.z + dz, PLAYER_RADIUS, { player: true })) player.z += dz;
 
         camera.position.set(player.x, EYE_HEIGHT, player.z);
         camera.rotation.y = player.yaw;

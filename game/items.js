@@ -1,6 +1,6 @@
 import * as THREE from "three";
 
-export function createItemSystem({ scene, camera, player, surfaces, getExtraTargets, onDrop, onMopUse }) {
+export function createItemSystem({ scene, camera, player, surfaces, getExtraTargets, onDrop, onMopUse, onUse }) {
     const REACH = 6;
     const DROP_DISTANCE = 1.5;
     // Where held items sit relative to the camera. The mop is held head down, leaning away
@@ -126,17 +126,23 @@ export function createItemSystem({ scene, camera, player, surfaces, getExtraTarg
             if (onMopUse(held, hit)) return;
         }
 
+        // Clicking something that isn't picked up, like a customer's box on the counter
+        if (!held && onUse(lookHit())) return;
+
         if (held) drop();
         else if (target) pickUp(target);
     }
 
-    function findShelfItem(shelf, row) {
+    // A box with the given label standing on the shelf, that nobody has claimed
+    function findShelfItem(shelf, label) {
         shelf.updateWorldMatrix(true, false);
+        const { x: width, y: height, z: depth } = shelf.userData.size;
         return items.find((item) => {
-            if (item === held || item.userData.carrier || item.userData.kind !== "box" || !item.visible) return false;
+            if (item === held || item.userData.carrier || item.userData.forSale) return false;
+            if (item.userData.label !== label || !item.visible) return false;
             const local = shelf.worldToLocal(item.getWorldPosition(new THREE.Vector3()));
-            return Math.abs(local.x) <= 1.8 && Math.abs(local.z) <= 0.8 &&
-                Math.abs(local.y - (0.1 + (row - 1) * 1.5)) <= 0.35;
+            return Math.abs(local.x) <= width / 2 && Math.abs(local.z) <= depth / 2 &&
+                local.y >= 0 && local.y <= height;
         });
     }
 

@@ -1,5 +1,7 @@
 import * as THREE from "three";
-import { ROOM_WIDTH, ROOM_DEPTH, WALL_HEIGHT, WALL_THICKNESS, W, D, PARTITION_X } from "./layout.js";
+import {
+    ROOM_WIDTH, ROOM_DEPTH, WALL_HEIGHT, WALL_THICKNESS, W, D, PARTITION_X, STORAGE_DOOR, FRONT_DOOR,
+} from "./layout.js";
 
 export function createEnvironment(scene, { surfaces, addSolid }) {
     scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1.5));
@@ -32,11 +34,21 @@ export function createEnvironment(scene, { surfaces, addSolid }) {
     }
 
     addWall(-W, -D, W, -D);
-    addWall(-W, D, W, D);
+    addWall(-W, D, FRONT_DOOR.x - FRONT_DOOR.width / 2, D);
+    addWall(FRONT_DOOR.x + FRONT_DOOR.width / 2, D, W, D);
     addWall(-W, -D, -W, D);
     addWall(W, -D, W, D);
 
     // Partition between the printer/restocking area and the shop floor, with a doorway near the top
-    addWall(PARTITION_X, -D, PARTITION_X, -9.5);
-    addWall(PARTITION_X, -6, PARTITION_X, D);
+    addWall(PARTITION_X, -D, PARTITION_X, STORAGE_DOOR.z - STORAGE_DOOR.width / 2);
+    addWall(PARTITION_X, STORAGE_DOOR.z + STORAGE_DOOR.width / 2, PARTITION_X, D);
+
+    // Sidewalk outside the front door, where customers come from
+    const sidewalk = new THREE.Mesh(
+        new THREE.PlaneGeometry(16, 8),
+        new THREE.MeshStandardMaterial({ color: 0x4a4a4a }),
+    );
+    sidewalk.rotation.x = -Math.PI / 2;
+    sidewalk.position.set(FRONT_DOOR.x, 0, D + 4);
+    scene.add(sidewalk);
 }

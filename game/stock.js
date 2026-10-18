@@ -2,10 +2,10 @@ import * as THREE from "three";
 
 // The items that get restocked, each with a color shared by its box stickers and shelf signs
 export const STOCK = [
-    { label: "Item 1", color: "#c8322a" },
-    { label: "Item 2", color: "#2a6fc8" },
-    { label: "Item 3", color: "#2e9a48" },
-    { label: "Item 4", color: "#e09a12" },
+    { label: "Item 1", color: "#c8322a", price: 3 },
+    { label: "Item 2", color: "#2a6fc8", price: 5 },
+    { label: "Item 3", color: "#2e9a48", price: 8 },
+    { label: "Item 4", color: "#e09a12", price: 12 },
 ];
 
 export function createStockSystem({ spawn, addItem }) {
@@ -19,10 +19,11 @@ export function createStockSystem({ spawn, addItem }) {
         shelf.rotation.y = rotation;
         shelf.updateMatrixWorld();
 
-        return SHELF_LEVELS.flatMap((y) =>
+        return SHELF_LEVELS.flatMap((y, level) =>
             SHELF_COLUMNS.map((column) => ({
                 position: shelf.localToWorld(new THREE.Vector3(column, y, 0)),
                 rotation,
+                level,
             })),
         );
     }
@@ -72,7 +73,7 @@ export function createStockSystem({ spawn, addItem }) {
         return shelf;
     }
 
-    async function restock(slot) {
+    async function placeBox(slot, onTaken = null) {
         const item = await spawn("placeholder", { ...slot.position, rotation: slot.rotation, solid: false });
         // Own materials so highlighting one item doesn't light up all of them
         item.traverse((child) => {
@@ -90,8 +91,13 @@ export function createStockSystem({ spawn, addItem }) {
         item.add(label);
         item.userData.label = slot.stock.label;
 
-        addItem(item, "box", () => restock(slot));
+        return addItem(item, "box", onTaken);
     }
 
-    return { shelfSlots, restock, spawnShelf };
+    // A box that gets replaced as soon as it's taken, for the storage shelves
+    function restock(slot) {
+        return placeBox(slot, () => restock(slot));
+    }
+
+    return { shelfSlots, placeBox, restock, spawnShelf };
 }

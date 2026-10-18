@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { W, D, INNER } from "../scene/layout.js";
+import { W, D, INNER, PARTITION_X } from "../scene/layout.js";
 import { randomBetween, isPartOf } from "./utils.js";
 import { randomImage } from "./print-images.js";
 
@@ -9,6 +9,8 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
 
     const PAPER_SIZE = [0.8, 0.02, 1.13];
     const PAPER_COUNT = 10;
+    // Papers lie around the printer, this far from it
+    const PAPER_SPREAD = [1.5, 5];
 
     // Printer model space, after centering: the slot runs the full width at y 2-2.25, from z -0.6 to
     // the front at z 1.1
@@ -102,13 +104,17 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
         addItem(cartridge, "cartridge", spawnCartridge);
     }
 
+    // On the storage room floor around the printer
     function scatterPapers() {
+        const { x: printerX, z: printerZ } = printer.group.position;
         for (let i = 0; i < PAPER_COUNT; i++) {
             let x, z;
             do {
-                x = randomBetween(-W + 1.5, W - 1.5);
-                z = randomBetween(-D + 1.5, D - 1.5);
-            } while (collides(x, z));
+                const angle = randomBetween(0, Math.PI * 2);
+                const distance = randomBetween(...PAPER_SPREAD);
+                x = printerX + Math.cos(angle) * distance;
+                z = printerZ + Math.sin(angle) * distance;
+            } while (x < -W + 1.5 || x > PARTITION_X - 1.5 || Math.abs(z) > D - 1.5 || collides(x, z));
 
             const paper = makePaper();
             paper.position.set(x, 0, z);

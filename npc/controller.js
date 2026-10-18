@@ -1,5 +1,7 @@
 import * as THREE from "three";
-import { W, D, PARTITION_X } from "../scene/layout.js";
+import { W, D, PARTITION_X, FRONT_DOOR } from "../scene/layout.js";
+import { STOCK } from "../game/stock.js";
+import { createNPC } from "./npc.js";
 
 // AI can also drive this animation by passing the distance moved each frame.
 export function createWalkingAnimation(npc) {
@@ -35,54 +37,69 @@ export function createWalkingAnimation(npc) {
     return { update, reset };
 }
 
-export function createNPCController({ npcs, collides, isPlaying, getShelf, getCounter, player, items, say = () => {} }) {
-    const animations = new Map();
-    const moveSpeed = 3;
-    const radius = 1.05;
-    let route = [];
-    let facingTarget;
-    let state = "idle";
-    let carriedItem;
-    let counterPosition;
-    let replanTime = 0;
+// Customers come in through the front door, each wanting one item. They take a box of it from a
+// shop shelf whose sign matches, queue at the counter and put it down for the player to ring up by
+// clicking it. If it's out of stock or the wait gets too long they walk out instead
+const MOVE_SPEED = 3;
+const RADIUS = 1.05;
+const MAX_CUSTOMERS = 3;
+const FIRST_CUSTOMER = 8;
+// Seconds between customers at the start, and once RAMP_TIME seconds have been played
+const SPAWN_INTERVAL = [25, 10];
+const RAMP_TIME = 300;
+// How long a customer waits for an empty shelf to be restocked, and in the queue until they're served
+const STOCK_PATIENCE = 25;
+const QUEUE_PATIENCE = 50;
+const HURRY_AT = 10;
+const QUEUE_SPACING = 2.2;
+const SHIRTS = [0x447abb, 0xbb4444, 0x44aa66, 0xaa66bb, 0xd08a2a, 0x555555];
 
+const OUTSIDE = new THREE.Vector3(FRONT_DOOR.x, 0, D + 6);
+const INSIDE = new THREE.Vector3(FRONT_DOOR.x, 0, D - 2.5);
+
+function pick(list) {
+    return list[Math.floor(Math.random() * list.length)];
+}
+
+export function createCustomerController({ scene, collides, items, register, speech, shelvesLoaded, counterLoaded }) {
+    const { say } = speech;
+    const customers = [];
+    // Customers holding their item, in line for the counter; the first one is being served
+    const queue = [];
+    let shelves = [];
+    let counter = null;
+    let played = 0;
+    let spawnIn = FIRST_CUSTOMER;
+    let spawned = 0;
+
+    Promise.all([shelvesLoaded, counterLoaded]).then(([loadedShelves, loadedCounter]) => {
+        shelves = loadedShelves;
+        counter = loadedCounter;
+    });
+
+    // Customers stay on the shop floor, out of the storage room
     function clearSegment(from, to) {
         const steps = Math.max(1, Math.ceil(Math.hypot(to.x - from.x, to.z - from.z) / 0.1));
         for (let i = 1; i <= steps; i++) {
             const x = from.x + (to.x - from.x) * i / steps;
             const z = from.z + (to.z - from.z) * i / steps;
-            if (x < PARTITION_X + radius + 0.25 || x > W - radius ||
-                Math.abs(z) > D - radius || collides(x, z, radius)) return false;
+            if (x < PARTITION_X + RADIUS + 0.25 || x > W - RADIUS ||
+                Math.abs(z) > D - RADIUS || collides(x, z, RADIUS)) return false;
         }
         return true;
     }
 
-    function shelfApproach(shelf) {
-        const bounds = new THREE.Box3().setFromObject(shelf);
-        const front = new THREE.Vector3(0, 0, 1).applyQuaternion(shelf.quaternion);
-        const center = bounds.getCenter(new THREE.Vector3());
-        const halfDepth = Math.abs(front.x) * (bounds.max.x - bounds.min.x) / 2 +
-            Math.abs(front.z) * (bounds.max.z - bounds.min.z) / 2;
-        return { target: center.clone().addScaledVector(front, halfDepth + radius + 0.25), center };
-    }
-
-    function findRoute(target, stopDistance = 0.5) {
-        const npc = npcs[0];
-        route = [];
-        if (!npc) return false;
-
-        // Search only the customer room, including when the staff doorway is open.
-        const start = { x: npc.position.x, z: npc.position.z, parent: null };
+    // Breadth-first search over a half-unit grid; null when the target can't be reached
+    function findRoute(from, target) {
+        const start = { x: from.x, z: from.z, parent: null };
         const queue = [start];
         const visited = new Set(["0,0"]);
         for (let index = 0; index < queue.length; index++) {
             const node = queue[index];
-            const nearby = Math.hypot(node.x - target.x, node.z - target.z) <= stopDistance;
-            if (nearby && (stopDistance > 0.5 ? canTalk(node, target) : clearSegment(node, target))) {
-                if (stopDistance <= 0.5) route.push(target);
+            if (Math.hypot(node.x - target.x, node.z - target.z) <= 0.5 && clearSegment(node, target)) {
+                const route = [target];
                 for (let step = node; step.parent; step = step.parent) route.push(step);
-                route.reverse();
-                return true;
+                return route.reverse();
             }
             for (const [dx, dz] of [[0.5, 0], [-0.5, 0], [0, 0.5], [0, -0.5]]) {
                 const next = { x: node.x + dx, z: node.z + dz, parent: node };
@@ -92,125 +109,241 @@ export function createNPCController({ npcs, collides, isPlaying, getShelf, getCo
                 if (clearSegment(node, next)) queue.push(next);
             }
         }
-        return false;
+        return null;
     }
 
-    function canTalk(from, to) {
-        const steps = Math.max(1, Math.ceil(Math.hypot(to.x - from.x, to.z - from.z) / 0.1));
-        for (let i = 1; i <= steps; i++) {
-            if (collides(from.x + (to.x - from.x) * i / steps,
-                from.z + (to.z - from.z) * i / steps, 0.1)) return false;
+    // Walks there, sliding along whatever's in the way if there's no route, then calls `arrive`
+    function go(customer, target, facing = null) {
+        customer.route = findRoute(customer.npc.position, target) ?? [target];
+        customer.facing = facing;
+        customer.moving = true;
+    }
+
+    function shelfApproach(shelf) {
+        const bounds = new THREE.Box3().setFromObject(shelf);
+        const front = new THREE.Vector3(0, 0, 1).applyQuaternion(shelf.quaternion);
+        const center = bounds.getCenter(new THREE.Vector3());
+        const halfDepth = Math.abs(front.x) * (bounds.max.x - bounds.min.x) / 2 +
+            Math.abs(front.z) * (bounds.max.z - bounds.min.z) / 2;
+        return { target: center.clone().addScaledVector(front, halfDepth + RADIUS + 0.25), center };
+    }
+
+    // In front of the counter, with the line growing away from it
+    function queueSpot(index) {
+        return counter.localToWorld(new THREE.Vector3(0, 0, 2 + RADIUS + 0.25 + index * QUEUE_SPACING));
+    }
+
+    function matchingShelves(customer) {
+        return shelves.filter((shelf) => shelf.userData.stock === customer.wanted.label);
+    }
+
+    function stockedShelf(customer) {
+        return matchingShelves(customer).find((shelf) => items.findShelfItem(shelf, customer.wanted.label));
+    }
+
+    function spawn() {
+        const npc = createNPC({ id: `customer-${++spawned}`, shirtColor: pick(SHIRTS) });
+        npc.position.copy(OUTSIDE);
+        scene.add(npc);
+        customers.push({
+            npc,
+            walk: createWalkingAnimation(npc),
+            wanted: pick(STOCK),
+            state: "entering",
+            route: [INSIDE.clone()],
+            moving: true,
+            facing: null,
+            shelf: null,
+            item: null,
+            patience: 0,
+            recheck: 0,
+            hurried: false,
+        });
+    }
+
+    function goToShelf(customer, shelf = stockedShelf(customer) ?? pick(matchingShelves(customer))) {
+        const { target, center } = shelfApproach(shelf);
+        customer.shelf = shelf;
+        customer.state = "shelf";
+        go(customer, target, center);
+    }
+
+    function takeFromShelf(customer) {
+        const item = items.findShelfItem(customer.shelf, customer.wanted.label);
+        if (item && items.takeForNPC(item, customer.npc)) {
+            customer.item = item;
+            joinQueue(customer);
+            return;
         }
+
+        const elsewhere = stockedShelf(customer);
+        if (elsewhere) {
+            goToShelf(customer, elsewhere);
+        } else if (customer.state !== "waiting") {
+            customer.state = "waiting";
+            customer.patience = STOCK_PATIENCE;
+            customer.hurried = false;
+            say(customer.npc, `Out of ${customer.wanted.label}?`);
+        }
+    }
+
+    function joinQueue(customer) {
+        queue.push(customer);
+        customer.state = "queue";
+        customer.patience = QUEUE_PATIENCE;
+        customer.hurried = false;
+        moveUp(customer);
+    }
+
+    function moveUp(customer) {
+        customer.spot = queue.indexOf(customer);
+        go(customer, queueSpot(customer.spot), counter.position);
+    }
+
+    // Puts the item down on the counter, facing the player behind it
+    function putOnCounter(customer) {
+        const position = counter.localToWorld(new THREE.Vector3(0, 0, 1));
+        position.y = new THREE.Box3().setFromObject(counter).max.y;
+        items.placeFromNPC(customer.item, position);
+        customer.item.rotation.y = counter.rotation.y + Math.PI;
+        customer.item.userData.forSale = customer;
+        customer.state = "paying";
+        say(customer.npc, `$${customer.wanted.price}`);
+    }
+
+    function leave(customer) {
+        if (customer.item) {
+            // A box still being carried is dropped on the spot, one on the counter stays there
+            if (customer.state !== "paying") {
+                const { x, z } = customer.npc.position;
+                items.placeFromNPC(customer.item, new THREE.Vector3(x, 0, z));
+            }
+            delete customer.item.userData.forSale;
+            customer.item = null;
+        }
+
+        const index = queue.indexOf(customer);
+        if (index !== -1) {
+            queue.splice(index, 1);
+            for (const waiting of queue.slice(index)) {
+                if (waiting.state === "queue") moveUp(waiting);
+            }
+        }
+
+        customer.state = "leaving";
+        customer.route = [...(findRoute(customer.npc.position, INSIDE) ?? [INSIDE.clone()]), OUTSIDE.clone()];
+        customer.moving = true;
+        customer.facing = null;
+    }
+
+    function walkOut(customer, line) {
+        say(customer.npc, line);
+        register.walkout();
+        leave(customer);
+    }
+
+    function arrive(customer) {
+        if (customer.state === "entering") {
+            say(customer.npc, `${customer.wanted.label}, please!`);
+            goToShelf(customer);
+        } else if (customer.state === "shelf") {
+            takeFromShelf(customer);
+        } else if (customer.state === "queue" && customer.spot === 0) {
+            putOnCounter(customer);
+        } else if (customer.state === "leaving") {
+            speech.clear(customer.npc);
+            customer.npc.removeFromParent();
+            customers.splice(customers.indexOf(customer), 1);
+        }
+    }
+
+    // Called with what the player clicked; rings up a customer's item on the counter
+    function trySell(hit) {
+        let item = hit?.object;
+        while (item && !item.userData.forSale) item = item.parent;
+        if (!item) return false;
+
+        const customer = item.userData.forSale;
+        items.removeItem(item);
+        item.removeFromParent();
+        customer.item = null;
+        register.sell(customer.wanted.price);
+        say(customer.npc, "Thanks!");
+        leave(customer);
         return true;
     }
 
-    function moveToShelf() {
-        if (state !== "idle") return;
-        const shelf = getShelf?.();
-        if (!shelf || !getCounter?.()) return;
-        const { target, center } = shelfApproach(shelf);
-        if (findRoute(target)) {
-            facingTarget = center;
-            state = "shelf";
-        }
-    }
-
-    function checkShelf() {
-        const item = items.findShelfItem(getShelf(), 2);
-        if (item) {
-            const counter = getCounter();
-            // The room-facing counter spans local X and is on local +Z.
-            const target = counter.localToWorld(new THREE.Vector3(0, 0, 2 + radius + 0.25));
-            if (!findRoute(target)) return;
-            if (items.takeForNPC(item, npcs[0])) {
-                carriedItem = item;
-                counterPosition = counter.localToWorld(new THREE.Vector3(0, 0, 1));
-                counterPosition.y = new THREE.Box3().setFromObject(counter).max.y;
-                facingTarget = counter.position;
-                state = "counter";
-                return;
+    function updatePatience(customer, dt) {
+        customer.patience -= dt;
+        if (customer.state === "waiting") {
+            customer.recheck -= dt;
+            if (customer.recheck <= 0) {
+                customer.recheck = 1;
+                const stocked = stockedShelf(customer);
+                if (stocked === customer.shelf) takeFromShelf(customer);
+                else if (stocked) goToShelf(customer, stocked);
             }
         }
-        route = [];
-        state = "player";
-        replanTime = 0;
-    }
+        if (customer.state !== "waiting" && customer.state !== "queue" && customer.state !== "paying") return;
 
-    function reset() {
-        for (const animation of animations.values()) animation.reset();
-    }
-
-    function onKeyDown(event) {
-        if (!isPlaying() || event.code !== "Space") return;
-        event.preventDefault();
-        if (!event.repeat) moveToShelf();
-    }
-
-    window.addEventListener("keydown", onKeyDown);
-    window.addEventListener("blur", reset);
-
-    function update(dt) {
-        if (!isPlaying()) {
-            reset();
-            return;
+        if (customer.patience <= 0) {
+            walkOut(customer, customer.state === "waiting" ? "Forget it!" : "I'm leaving!");
+        } else if (customer.patience <= HURRY_AT && !customer.hurried) {
+            customer.hurried = true;
+            say(customer.npc, customer.state === "waiting" ? "Any more coming?" : "Hurry up!");
         }
-        const npc = npcs[0];
-        if (!npc) return;
-        if (!animations.has(npc)) animations.set(npc, createWalkingAnimation(npc));
+    }
 
-        if (state === "player") {
-            facingTarget = player;
-            if (Math.hypot(npc.position.x - player.x, npc.position.z - player.z) <= 2.5 && canTalk(npc.position, player)) {
-                route = [];
-                state = "idle";
-                say(npc, "fuck");
-            } else {
-                replanTime -= dt;
-                if (replanTime <= 0) {
-                    findRoute(player, 2.2);
-                    replanTime = 0.75;
-                }
-            }
-        }
+    function updateCustomer(customer, dt) {
+        const { npc } = customer;
+        updatePatience(customer, dt);
 
         let dx = 0;
         let dz = 0;
-        if (route.length) {
-            const next = route[0];
+        if (customer.route.length) {
+            const next = customer.route[0];
             const remaining = Math.hypot(next.x - npc.position.x, next.z - npc.position.z);
-            const step = Math.min(moveSpeed * dt, remaining);
+            const step = Math.min(MOVE_SPEED * dt, remaining);
             dx = remaining ? (next.x - npc.position.x) / remaining * step : 0;
             dz = remaining ? (next.z - npc.position.z) / remaining * step : 0;
             if (remaining > 0.0001) npc.rotation.y = Math.atan2(dx, dz);
-            if (step >= remaining) route.shift();
+            if (step >= remaining) customer.route.shift();
         }
         const startX = npc.position.x;
         const startZ = npc.position.z;
 
-        // Slide along obstacles using the same collision system as the player.
-        if (!collides(startX + dx, startZ, radius)) npc.position.x += dx;
-        if (!collides(npc.position.x, startZ + dz, radius)) npc.position.z += dz;
+        // Slide along obstacles using the same collision system as the player
+        if (!collides(startX + dx, startZ, RADIUS)) npc.position.x += dx;
+        if (!collides(npc.position.x, startZ + dz, RADIUS)) npc.position.z += dz;
 
-        const moved = Math.hypot(npc.position.x - startX, npc.position.z - startZ);
-        animations.get(npc).update(dt, moved);
-        if (!route.length && facingTarget) {
-            npc.rotation.y = Math.atan2(facingTarget.x - npc.position.x, facingTarget.z - npc.position.z);
-            facingTarget = undefined;
-            if (state === "shelf") checkShelf();
-            else if (state === "counter") {
-                items.placeFromNPC(carriedItem, counterPosition);
-                carriedItem = undefined;
-                state = "idle";
+        customer.walk.update(dt, Math.hypot(npc.position.x - startX, npc.position.z - startZ));
+
+        if (!customer.route.length && customer.moving) {
+            customer.moving = false;
+            if (customer.facing) {
+                npc.rotation.y = Math.atan2(customer.facing.x - npc.position.x, customer.facing.z - npc.position.z);
             }
+            arrive(customer);
         }
     }
 
-    function dispose() {
-        window.removeEventListener("keydown", onKeyDown);
-        window.removeEventListener("blur", reset);
-        reset();
-        animations.clear();
+    function update(dt) {
+        if (!counter) return;
+
+        played += dt;
+        spawnIn -= dt;
+        if (spawnIn <= 0) {
+            if (customers.length < MAX_CUSTOMERS) spawn();
+            const ramp = Math.min(played / RAMP_TIME, 1);
+            spawnIn = THREE.MathUtils.lerp(...SPAWN_INTERVAL, ramp);
+        }
+
+        for (const customer of [...customers]) updateCustomer(customer, dt);
     }
 
-    return { update, reset, dispose };
+    function reset() {
+        for (const customer of customers) customer.walk.reset();
+    }
+
+    return { update, reset, trySell, positions: () => customers.map((customer) => customer.npc.position) };
 }

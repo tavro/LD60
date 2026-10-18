@@ -6,7 +6,7 @@ const FACE_UP = Math.PI;
 const FACE_LEFT = -Math.PI / 2;
 const FACE_RIGHT = Math.PI / 2;
 
-export function createFurniture({ spawn, shelfSlots, restock, spawnShelf }) {
+export function createFurniture({ spawn, shelfSlots, placeBox, restock, spawnShelf }) {
     const PRINTER = { x: -12, z: -INNER + 1.2 };
     const printerLoaded = spawn("printer", PRINTER);
 
@@ -21,18 +21,24 @@ export function createFurniture({ spawn, shelfSlots, restock, spawnShelf }) {
         for (const slot of shelfSlots(shelf)) restock({ ...slot, stock: STOCK[i] });
     });
 
+    // Shop shelves, where customers take what they buy. Each starts with one row of its item
+    const shopShelves = [];
+
+    function spawnShopShelf(options, stock) {
+        for (const slot of shelfSlots(options).filter((slot) => slot.level === 1)) placeBox({ ...slot, stock });
+        shopShelves.push(spawnShelf(options, stock));
+    }
+
     // Double-sided shelf island in the middle, where each row holds one item on both sides, from
     // Item 1 at the top
-    let firstCustomerShelfLoaded;
     [-6, -2, 2, 6].forEach((z, i) => {
-        const shelfLoaded = spawnShelf({ x: 3, z, rotation: FACE_LEFT }, STOCK[i]);
-        firstCustomerShelfLoaded ??= shelfLoaded;
-        spawnShelf({ x: 5, z, rotation: FACE_RIGHT }, STOCK[i]);
+        spawnShopShelf({ x: 3, z, rotation: FACE_LEFT }, STOCK[i]);
+        spawnShopShelf({ x: 5, z, rotation: FACE_RIGHT }, STOCK[i]);
     });
 
     // Shelf along the right wall, for Item 1 and 2 again
     [-9, -5].forEach((z, i) => {
-        spawnShelf({ x: W - WALL_THICKNESS / 2 - 1, z, rotation: FACE_LEFT }, STOCK[i]);
+        spawnShopShelf({ x: W - WALL_THICKNESS / 2 - 1, z, rotation: FACE_LEFT }, STOCK[i]);
     });
 
     // Desk in the bottom right corner: counter along the room side, with two legs reaching towards the
@@ -48,5 +54,5 @@ export function createFurniture({ spawn, shelfSlots, restock, spawnShelf }) {
         ],
     });
 
-    return { printerLoaded, firstCustomerShelfLoaded, counterLoaded };
+    return { printerLoaded, shopShelvesLoaded: Promise.all(shopShelves), counterLoaded };
 }

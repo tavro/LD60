@@ -3,6 +3,7 @@ import { createRendering } from "./scene/rendering.js";
 import { createEnvironment } from "./scene/environment.js";
 import { createModelSpawner } from "./scene/models.js";
 import { createFurniture } from "./scene/furniture.js";
+import { createDoors } from "./scene/doors.js";
 import { createCollisionSystem } from "./game/collisions.js";
 import { createPlayer } from "./game/player.js";
 import { createControls } from "./game/controls.js";
@@ -12,20 +13,22 @@ import { createAnimationSystem } from "./game/animation.js";
 import { createPrinterSystem } from "./game/printer.js";
 import { createMusicSystem } from "./game/music.js";
 import { applySettings } from "./game/settings.js";
-import { addNPCs } from "./npc/npc.js";
-import { createNPCController } from "./npc/controller.js";
+import { createRegister } from "./game/register.js";
+import { createCustomerController } from "./npc/controller.js";
 import { createNPCSpeech } from "./npc/speech.js";
 
 const { scene, camera, renderer } = createRendering();
 const collisions = createCollisionSystem();
 createEnvironment(scene, collisions);
+const doors = createDoors(scene, collisions);
 
 const models = createModelSpawner(scene, collisions);
 const player = createPlayer(camera, collisions);
 const animations = createAnimationSystem();
 
-// Callbacks connect item interactions to the printer without module import cycles.
+// Callbacks connect item interactions to the printer and customers without module import cycles.
 let printer;
+let customers;
 const items = createItemSystem({
     scene,
     camera,
@@ -34,9 +37,10 @@ const items = createItemSystem({
     getExtraTargets: () => printer?.puddle.visible ? [printer.puddle] : [],
     onDrop: (item, hit) => printer.handleDrop(item, hit),
     onMopUse: (mop, hit) => printer.tryScrub(mop, hit),
+    onUse: (hit) => customers?.trySell(hit) ?? false,
 });
 const stock = createStockSystem({ spawn: models.spawn, addItem: items.addItem });
-const { printerLoaded, firstCustomerShelfLoaded, counterLoaded } = createFurniture({ spawn: models.spawn, ...stock });
+const { printerLoaded, shopShelvesLoaded, counterLoaded } = createFurniture({ spawn: models.spawn, ...stock });
 printer = createPrinterSystem({
     scene,
     items,
@@ -45,33 +49,25 @@ printer = createPrinterSystem({
     printerLoaded,
 });
 
-// Place loose items and NPCs after the furniture and initial stock have loaded.
-const npcs = [];
-let firstCustomerShelf;
-let counter;
-Promise.all([models.ready(), firstCustomerShelfLoaded, counterLoaded]).then(([, shelf, desk]) => {
-    firstCustomerShelf = shelf;
-    counter = desk;
-    printer.initialize();
-    npcs.push(...addNPCs(scene));
-});
+// Place loose items after the furniture and initial stock have loaded.
+models.ready().then(() => printer.initialize());
 
 const npcSpeech = createNPCSpeech();
-const npcController = createNPCController({
-    npcs,
+const register = createRegister(scene, counterLoaded);
+customers = createCustomerController({
+    scene,
     collides: collisions.collides,
-    getShelf: () => firstCustomerShelf,
-    getCounter: () => counter,
-    player: player.state,
     items,
-    say: npcSpeech.say,
-    isPlaying: () => controls.playing,
+    register,
+    speech: npcSpeech,
+    shelvesLoaded: shopShelvesLoaded,
+    counterLoaded,
 });
 const controls = createControls({
     renderer,
     player,
     interact: items.interact,
-    onPause: npcController.reset,
+    onPause: customers.reset,
 });
 const music = createMusicSystem();
 const timer = new THREE.Timer();
@@ -83,7 +79,8 @@ function animate(time) {
     // Place the camera even while paused, so the world remains behind the menu.
     player.update(controls.playing ? dt : 0);
     if (controls.playing) {
-        npcController.update(dt);
+        doors.update(dt, player.state, customers.positions());
+        customers.update(dt);
         npcSpeech.update(dt);
         items.update(dt);
         animations.update(dt);
