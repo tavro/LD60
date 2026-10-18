@@ -7,11 +7,12 @@ function pick(list) {
 
 // The items that get restocked, each with a color shared by its box stickers and shelf signs
 export const STOCK = [
-    // `model` and `scale` are the item's model, if it isn't a placeholder box
+    // `model` and `scale` are the item's model, if it isn't a placeholder box. `sticker: "top"` puts
+    // the price sticker on top even on taller items, where the front has something to show
     { label: "Mouse", color: "#c8322a", price: 3, model: "mouse", scale: 2 },
     { label: "Tape recorder", color: "#2a6fc8", price: 5, model: "tape_recorder", scale: 2.5 },
     { label: "Phone", color: "#2e9a48", price: 8, model: "phone", scale: 2.5 },
-    { label: "Item 4", color: "#e09a12", price: 12 },
+    { label: "Camera", color: "#e09a12", price: 12, model: "camera", scale: 0.75, sticker: "top" },
 ];
 
 // Some boxes come with the wrong price on their sticker, off by one of these amounts. The shelf
@@ -138,7 +139,7 @@ export function createStockSystem({ spawn, addItem, slots }) {
         // On the front of boxes, or lying on top of flat things like the mouse, tilted towards the
         // front, sized to fit
         const size = item.userData.size;
-        if (size.y >= 0.6) {
+        if (size.y >= 0.6 && stock.sticker !== "top") {
             label.position.set(0, size.y / 2, size.z / 2 + 0.005);
         } else {
             label.position.set(0, size.y + 0.02, 0);

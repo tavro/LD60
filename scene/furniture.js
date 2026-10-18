@@ -1,5 +1,7 @@
 import { W, INNER, WALL_THICKNESS, PARTITION_X } from "./layout.js";
+import * as THREE from "three";
 import { STOCK } from "../game/stock.js";
+import { pixelateLighting } from "./lighting.js";
 
 // Shelves are open on local +Z; rotate that side towards the aisle.
 const FACE_UP = Math.PI;
@@ -17,6 +19,100 @@ function shuffled(list) {
         [copy[i], copy[j]] = [copy[j], copy[i]];
     }
     return copy;
+}
+
+// The desk's pixel-art look, in pixels PIXEL units across, the size of the light and shadow pixels:
+// a light speckled laminate top, and dark panels PANEL_WIDTH wide around the sides
+const PIXEL = 0.25;
+const PANEL_WIDTH = 4;
+
+function pixelTexture(width, height, paint) {
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            ctx.fillStyle = paint(x, y);
+            ctx.fillRect(x, y, 1, 1);
+        }
+    }
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.magFilter = THREE.NearestFilter;
+    texture.minFilter = THREE.NearestFilter;
+    texture.generateMipmaps = false;
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    return texture;
+}
+
+const shade = (hex, amount) => `#${new THREE.Color(hex).offsetHSL(0, 0, amount).getHexString()}`;
+
+function laminateTexture() {
+    return pixelTexture(16, 16, () => {
+        const roll = Math.random();
+        return roll > 0.9 ? "#9c9a94" : roll > 0.8 ? "#e2dfd8" : shade("#c9c6bf", (Math.random() - 0.5) * 0.02);
+    });
+}
+
+// A panel as tall as the desk, with a lighter edge along the top, a groove down one side and a
+// dark kick plate along the floor
+function panelTexture(height) {
+    const pixels = Math.round(height / PIXEL);
+    return pixelTexture(PANEL_WIDTH / PIXEL, pixels, (x, y) => {
+        if (y === 0) return "#8a9098";
+        if (y === pixels - 1) return "#3a3e44";
+        if (x === 0) return "#4a5057";
+        return shade("#646b74", (Math.random() - 0.5) * 0.03);
+    });
+}
+
+// Faces looking up get the laminate, and the rest the panels, laid out by where each face is so the
+// pixels are the same size all over. Unless the model comes with a texture of its own
+function dressDesk(desk) {
+    desk.traverse((mesh) => {
+        if (!mesh.isMesh || mesh.material.map) return;
+        // Split into separate triangles, sorted so the ones facing up come first and can have the
+        // laminate while the rest have the panels
+        const flat = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry.clone();
+        flat.computeBoundingBox();
+        const { min, max } = flat.boundingBox;
+        const height = max.y - min.y;
+        const triangles = [];
+        for (let i = 0; i < flat.attributes.position.count; i += 3) triangles.push(i);
+        const facesUp = (i) => flat.attributes.normal.getY(i) > 0.5;
+        triangles.sort((a, b) => facesUp(b) - facesUp(a));
+
+        const geometry = new THREE.BufferGeometry();
+        for (const name of ["position", "normal", "uv"]) {
+            const source = flat.attributes[name];
+            const attribute = new THREE.BufferAttribute(new Float32Array(source.array.length), source.itemSize);
+            triangles.forEach((from, to) => {
+                for (let k = 0; k < 3; k++) attribute.copyAt(to * 3 + k, source, from + k);
+            });
+            geometry.setAttribute(name, attribute);
+        }
+
+        // Texture coordinates from where each corner is: across the top, and along and up the sides
+        // with the panels' top edge at the top of the desk
+        const { position, normal, uv } = geometry.attributes;
+        for (let i = 0; i < position.count; i++) {
+            const [x, y, z] = [position.getX(i), position.getY(i), position.getZ(i)];
+            const [nx, ny] = [Math.abs(normal.getX(i)), Math.abs(normal.getY(i))];
+            if (ny > 0.5) uv.setXY(i, x / 4, z / 4);
+            else uv.setXY(i, (nx > 0.5 ? z : x) / PANEL_WIDTH, (y - min.y) / height);
+        }
+        const up = triangles.filter(facesUp).length * 3;
+        geometry.addGroup(0, up, 0);
+        geometry.addGroup(up, position.count - up, 1);
+
+        mesh.geometry = geometry;
+        mesh.material = [
+            pixelateLighting(new THREE.MeshStandardMaterial({ map: laminateTexture(), roughness: 0.7 })),
+            pixelateLighting(new THREE.MeshStandardMaterial({ map: panelTexture(height), roughness: 0.85 })),
+        ];
+    });
 }
 
 export function createFurniture({ spawn, shelfSlots, placeBox, spawnShelf }) {
@@ -87,6 +183,7 @@ export function createFurniture({ spawn, shelfSlots, placeBox, spawnShelf }) {
             [2, -2, 4, 0],
         ],
     });
+    counterLoaded.then(dressDesk);
 
     return {
         printerLoaded, shopShelvesLoaded: Promise.all(shopShelves), counterLoaded, addExtraShelf,
