@@ -46,6 +46,7 @@ const items = createItemSystem({
     surfaces: collisions.surfaces,
     slots: shelfSlots,
     physics,
+    collides: collisions.collides,
     getExtraTargets: () => printer?.puddle.visible ? [printer.puddle] : [],
     onDrop: (item, hit) => {
         printer.handleDrop(item, hit);
@@ -57,7 +58,11 @@ const items = createItemSystem({
     onGive: (item) => customers.give(item),
 });
 const stock = createStockSystem({ spawn: models.spawn, addItem: items.addItem, slots: shelfSlots });
-const { printerLoaded, shopShelvesLoaded, counterLoaded, addExtraShelf } = createFurniture({ spawn: models.spawn, ...stock });
+const { printerLoaded, shopShelvesLoaded, counterLoaded, addExtraShelf, refillStorage } = createFurniture({
+    spawn: models.spawn,
+    ...stock,
+    isTaken: (position) => items.list().some((item) => item.position.distanceTo(position) < 0.5),
+});
 printer = createPrinterSystem({
     scene,
     items,
@@ -163,13 +168,15 @@ function applyUpgrade(id, level) {
     else if (id === "alarm") customers.setAlarm(true);
 }
 
+// The storage shelves get a delivery overnight, topping them back up
 function endShift(result) {
     controls.stop();
     customers.clear();
-    showShiftResult(result);
+    showShiftResult({ ...result, delivered: refillStorage() });
 }
 
-function showShiftResult({ day, success, takings, target, walkouts, maxWalkouts }) {
+function showShiftResult(result) {
+    const { day, success, takings, target, walkouts, maxWalkouts, delivered } = result;
     const failedBy = walkouts >= maxWalkouts ? "Too many walkouts." : `Missed the $${target} target.`;
     const upgrades = success
         ? shift.upgradeOffers().map((upgrade) => ({
@@ -179,7 +186,7 @@ function showShiftResult({ day, success, takings, target, walkouts, maxWalkouts 
             onBuy: () => {
                 const level = shift.buy(upgrade.id);
                 if (level) applyUpgrade(upgrade.id, level);
-                showShiftResult({ day, success, takings, target, walkouts, maxWalkouts });
+                showShiftResult(result);
             },
         }))
         : [];
@@ -190,6 +197,7 @@ function showShiftResult({ day, success, takings, target, walkouts, maxWalkouts 
             `Takings: $${takings} of $${target}`,
             `Walkouts: ${walkouts} of ${maxWalkouts}`,
             success ? `Bank: $${shift.bank}` : failedBy,
+            `Overnight delivery: ${delivered} ${delivered === 1 ? "box" : "boxes"} for the storage room`,
         ],
         upgrades,
         button: success ? `▶ Start day ${day + 1}` : "▶ Try again",

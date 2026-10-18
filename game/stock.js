@@ -125,10 +125,5 @@ export function createStockSystem({ spawn, addItem, slots }) {
         item.userData.sticker.material.map = labelTexture(stock, stock.price);
     }
 
-    // A box that gets replaced as soon as it's taken, for the storage shelves
-    function restock(slot) {
-        return placeBox(slot, () => restock(slot));
-    }
-
-    return { shelfSlots, placeBox, restock, spawnShelf, retag };
+    return { shelfSlots, placeBox, spawnShelf, retag };
 }

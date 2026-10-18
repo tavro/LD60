@@ -17,7 +17,6 @@ const MIN_HALF_SIZE = 0.03;
 export function createPhysics({ footprints }) {
     const world = new CANNON.World({ gravity: new CANNON.Vec3(0, -GRAVITY, 0) });
     world.allowSleep = true;
-    world.broadphase = new CANNON.SAPBroadphase(world);
     world.defaultContactMaterial.friction = 0.4;
     world.defaultContactMaterial.restitution = 0.25;
 
@@ -116,7 +115,8 @@ export function createPhysics({ footprints }) {
 
     function update(dt) {
         syncStatics();
-        world.step(1 / 60, dt, 5);
+        // Small steps, so fast items can't skip through a thin wall between two of them
+        world.step(1 / 120, dt, 10);
 
         for (const [item, { body, offset }] of loose) {
             // Anything that somehow got out of the room comes back from above
