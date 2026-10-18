@@ -17,7 +17,7 @@ const SHADOW_AREA = { width: 2 * W + 4, depth: 2 * D + 4 };
 // How often new meshes (boxes, customers, prints) get their shadows switched on, and how often the
 // shadows are redrawn (every frame costs about a millisecond and blocky shadows don't need it)
 const SHADOW_CHECK_EVERY = 0.5;
-const SHADOW_REDRAW_EVERY = 1 / 20;
+let shadowRedrawEvery = 1 / 20;
 
 export function createLighting(scene) {
     const fill = new THREE.HemisphereLight(FILL.sky, FILL.ground, FILL.intensity);
@@ -69,7 +69,7 @@ export function createLighting(scene) {
         redrawIn -= dt;
         if (redrawIn <= 0) {
             key.shadow.needsUpdate = true;
-            redrawIn = SHADOW_REDRAW_EVERY;
+            redrawIn = shadowRedrawEvery;
         }
 
         checkIn -= dt;
@@ -77,6 +77,10 @@ export function createLighting(scene) {
         checkIn = SHADOW_CHECK_EVERY;
 
         scene.traverse((object) => {
+            // Every light, including ones added later like the shift button's, also lights the held
+            // item's pass. If the two passes saw different lights, every material would be set up
+            // again for each, every frame
+            if (object.isLight) object.layers.enable(HELD_LAYER);
             if (!object.isMesh || object.userData.shadowSet) return;
             let mode = "both";
             for (let o = object; o; o = o.parent) {
@@ -91,5 +95,15 @@ export function createLighting(scene) {
         });
     }
 
-    return { update };
+    // For the graphics setting: which panels shine light down ("all", "half" or "none", with the
+    // fill brighter to make up for them), and how many times a second shadows are redrawn
+    function setQuality({ panels, shadowRate }) {
+        panelLights.forEach((light, i) => {
+            light.visible = panels === "all" || (panels === "half" && i % 2 === 0);
+        });
+        fill.intensity = FILL.intensity * (panels === "none" ? 1.8 : panels === "half" ? 1.2 : 1);
+        shadowRedrawEvery = 1 / shadowRate;
+    }
+
+    return { update, setQuality };
 }

@@ -19,7 +19,6 @@ const RUSH_MAX_CUSTOMERS = 6;
 // Bought between shifts; `cost` has the price of each level
 export const UPGRADES = [
     { id: "belt", name: "Faster belt", description: "The belt runs 50% faster.", cost: [20, 40] },
-    { id: "coffee", name: "Free coffee", description: "Customers are 25% more patient.", cost: [25, 50] },
     { id: "shelf", name: "Extra shelf", description: "Another shelf for Item 3, then Item 4.", cost: [30, 45] },
     { id: "alarm", name: "Door alarm", description: "Shoplifters get caught at the door.", cost: [40] },
 ];
