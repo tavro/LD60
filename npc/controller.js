@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { W, D, PARTITION_X, FRONT_DOOR } from "../scene/layout.js";
 import { STOCK } from "../game/stock.js";
+import { BELT_START } from "../game/belt.js";
 import { createNPC } from "./npc.js";
 
 // AI can also drive this animation by passing the distance moved each frame.
@@ -38,8 +39,9 @@ export function createWalkingAnimation(npc) {
 }
 
 // Customers come in through the front door, each wanting one item. They take a box of it from a
-// shop shelf whose sign matches, queue at the counter and put it down for the player to ring up by
-// clicking it. If it's out of stock or the wait gets too long they walk out instead
+// shop shelf whose sign matches, queue at the start of the belt on the counter and put it down
+// there, then wait by the cashier for the player to ring it up by clicking it. If it's out of stock
+// or the wait gets too long they walk out instead
 const MOVE_SPEED = 3;
 const RADIUS = 1.05;
 const MAX_CUSTOMERS = 3;
@@ -61,10 +63,11 @@ function pick(list) {
     return list[Math.floor(Math.random() * list.length)];
 }
 
-export function createCustomerController({ scene, collides, items, register, speech, shelvesLoaded, counterLoaded }) {
+export function createCustomerController({ scene, collides, items, register, belt, speech, shelvesLoaded, counterLoaded }) {
     const { say } = speech;
     const customers = [];
-    // Customers holding their item, in line for the counter; the first one is being served
+    // Customers holding their item, in line for the counter; the first one is being served. Once
+    // their item is on the belt they wait by the cashier, and the next one steps up to the belt
     const queue = [];
     let shelves = [];
     let counter = null;
@@ -128,9 +131,22 @@ export function createCustomerController({ scene, collides, items, register, spe
         return { target: center.clone().addScaledVector(front, halfDepth + RADIUS + 0.25), center };
     }
 
-    // In front of the counter, with the line growing away from it
-    function queueSpot(index) {
-        return counter.localToWorld(new THREE.Vector3(0, 0, 2 + RADIUS + 0.25 + index * QUEUE_SPACING));
+    // A spot in front of the counter at the given position along it, and the point to face there
+    function counterSpot(alongX, out = 0) {
+        return {
+            target: counter.localToWorld(new THREE.Vector3(alongX, 0, 2 + RADIUS + 0.25 + out)),
+            facing: counter.localToWorld(new THREE.Vector3(alongX, 0, 0)),
+        };
+    }
+
+    // Opposite the gap between the desk legs, where the cashier stands
+    function paySpot() {
+        return counterSpot(1);
+    }
+
+    // At the start of the belt, with the line growing away from the counter
+    function lineSpot(index) {
+        return counterSpot(BELT_START, Math.max(index - 1, 0) * QUEUE_SPACING);
     }
 
     function matchingShelves(customer) {
@@ -155,6 +171,8 @@ export function createCustomerController({ scene, collides, items, register, spe
             facing: null,
             shelf: null,
             item: null,
+            placed: false,
+            spot: null,
             patience: 0,
             recheck: 0,
             hurried: false,
@@ -192,29 +210,39 @@ export function createCustomerController({ scene, collides, items, register, spe
         customer.state = "queue";
         customer.patience = QUEUE_PATIENCE;
         customer.hurried = false;
-        moveUp(customer);
+        arrangeQueue();
     }
 
-    function moveUp(customer) {
-        customer.spot = queue.indexOf(customer);
-        go(customer, queueSpot(customer.spot), counter.position);
+    // Sends everyone in line to where they should stand, if that changed
+    function arrangeQueue() {
+        queue.forEach((customer, index) => {
+            const { target, facing } = index === 0 && customer.placed ? paySpot() : lineSpot(index);
+            if (customer.spot?.distanceTo(target) < 0.01) return;
+            customer.spot = target;
+            go(customer, target, facing);
+        });
     }
 
-    // Puts the item down on the counter, facing the player behind it
-    function putOnCounter(customer) {
-        const position = counter.localToWorld(new THREE.Vector3(0, 0, 1));
-        position.y = new THREE.Box3().setFromObject(counter).max.y;
-        items.placeFromNPC(customer.item, position);
-        customer.item.rotation.y = counter.rotation.y + Math.PI;
+    // At the front of the line, or next once the first one has put theirs down, when the start of
+    // the belt is clear
+    function tryPlaceOnBelt(customer) {
+        const index = queue.indexOf(customer);
+        if (customer.placed || customer.moving || !belt.hasRoom()) return;
+        if (index > 1 || (index === 1 && !queue[0].placed)) return;
+        items.placeFromNPC(customer.item, customer.npc.position);
+        belt.place(customer.item);
         customer.item.userData.forSale = customer;
-        customer.state = "paying";
+        customer.placed = true;
         say(customer.npc, `$${customer.wanted.price}`);
+        arrangeQueue();
     }
 
     function leave(customer) {
         if (customer.item) {
-            // A box still being carried is dropped on the spot, one on the counter stays there
-            if (customer.state !== "paying") {
+            // A box still being carried is dropped on the spot, one on the belt stops where it is
+            if (customer.placed) {
+                belt.remove(customer.item);
+            } else {
                 const { x, z } = customer.npc.position;
                 items.placeFromNPC(customer.item, new THREE.Vector3(x, 0, z));
             }
@@ -225,9 +253,7 @@ export function createCustomerController({ scene, collides, items, register, spe
         const index = queue.indexOf(customer);
         if (index !== -1) {
             queue.splice(index, 1);
-            for (const waiting of queue.slice(index)) {
-                if (waiting.state === "queue") moveUp(waiting);
-            }
+            arrangeQueue();
         }
 
         customer.state = "leaving";
@@ -248,8 +274,6 @@ export function createCustomerController({ scene, collides, items, register, spe
             goToShelf(customer);
         } else if (customer.state === "shelf") {
             takeFromShelf(customer);
-        } else if (customer.state === "queue" && customer.spot === 0) {
-            putOnCounter(customer);
         } else if (customer.state === "leaving") {
             speech.clear(customer.npc);
             customer.npc.removeFromParent();
@@ -264,6 +288,7 @@ export function createCustomerController({ scene, collides, items, register, spe
         if (!item) return false;
 
         const customer = item.userData.forSale;
+        belt.remove(item);
         items.removeItem(item);
         item.removeFromParent();
         customer.item = null;
@@ -284,7 +309,7 @@ export function createCustomerController({ scene, collides, items, register, spe
                 else if (stocked) goToShelf(customer, stocked);
             }
         }
-        if (customer.state !== "waiting" && customer.state !== "queue" && customer.state !== "paying") return;
+        if (customer.state !== "waiting" && customer.state !== "queue") return;
 
         if (customer.patience <= 0) {
             walkOut(customer, customer.state === "waiting" ? "Forget it!" : "I'm leaving!");
@@ -297,6 +322,7 @@ export function createCustomerController({ scene, collides, items, register, spe
     function updateCustomer(customer, dt) {
         const { npc } = customer;
         updatePatience(customer, dt);
+        if (customer.state === "queue") tryPlaceOnBelt(customer);
 
         let dx = 0;
         let dz = 0;

@@ -17,6 +17,26 @@ export function createEnvironment(scene, { surfaces, addSolid }) {
     scene.add(floor);
     surfaces.push(floor);
 
+    const ceiling = new THREE.Mesh(
+        new THREE.PlaneGeometry(ROOM_WIDTH, ROOM_DEPTH),
+        // Faces away from the lights, so it glows a little as if lit by the panels
+        new THREE.MeshStandardMaterial({ color: 0xd8d8d0, emissive: 0x6a6a64 }),
+    );
+    ceiling.rotation.x = Math.PI / 2;
+    ceiling.position.y = WALL_HEIGHT;
+    scene.add(ceiling);
+
+    // Fluorescent light panels in a grid on the ceiling
+    const panelGeometry = new THREE.BoxGeometry(3, 0.1, 1);
+    const panelMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xf4f4ea });
+    for (const x of [-14, -8, 2, 10, 16]) {
+        for (const z of [-8, 0, 8]) {
+            const panel = new THREE.Mesh(panelGeometry, panelMaterial);
+            panel.position.set(x, WALL_HEIGHT - 0.05, z);
+            scene.add(panel);
+        }
+    }
+
     const wallMaterial = new THREE.MeshStandardMaterial({ color: 0xbbbbaa });
 
     function addWall(x1, z1, x2, z2) {

@@ -8,7 +8,8 @@ export const STOCK = [
     { label: "Item 4", color: "#e09a12", price: 12 },
 ];
 
-export function createStockSystem({ spawn, addItem }) {
+// `slots` collects every spot on every shelf, for boxes to snap to when put down
+export function createStockSystem({ spawn, addItem, slots }) {
     const SHELF_LEVELS = [0.1, 1.6, 3.1, 4.6];
     const SHELF_COLUMNS = [-1.2, 0, 1.2];
 
@@ -60,6 +61,7 @@ export function createStockSystem({ spawn, addItem }) {
     const SIGN_SIZE = [2.4, 0.9, 0.1];
 
     async function spawnShelf(options, stock) {
+        slots.push(...shelfSlots(options));
         const shelf = await spawn("shelf", options);
         shelf.userData.stock = stock.label;
 

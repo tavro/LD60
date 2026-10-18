@@ -14,6 +14,7 @@ import { createPrinterSystem } from "./game/printer.js";
 import { createMusicSystem } from "./game/music.js";
 import { applySettings } from "./game/settings.js";
 import { createRegister } from "./game/register.js";
+import { createBelt } from "./game/belt.js";
 import { createCustomerController } from "./npc/controller.js";
 import { createNPCSpeech } from "./npc/speech.js";
 
@@ -26,6 +27,9 @@ const models = createModelSpawner(scene, collisions);
 const player = createPlayer(camera, collisions);
 const animations = createAnimationSystem();
 
+// Shelf spots, filled in as the shelves are made, for boxes to snap to
+const shelfSlots = [];
+
 // Callbacks connect item interactions to the printer and customers without module import cycles.
 let printer;
 let customers;
@@ -34,12 +38,16 @@ const items = createItemSystem({
     camera,
     player: player.state,
     surfaces: collisions.surfaces,
+    slots: shelfSlots,
     getExtraTargets: () => printer?.puddle.visible ? [printer.puddle] : [],
-    onDrop: (item, hit) => printer.handleDrop(item, hit),
+    onDrop: (item, hit) => {
+        printer.handleDrop(item, hit);
+        belt.handleDrop(item);
+    },
     onMopUse: (mop, hit) => printer.tryScrub(mop, hit),
     onUse: (hit) => customers?.trySell(hit) ?? false,
 });
-const stock = createStockSystem({ spawn: models.spawn, addItem: items.addItem });
+const stock = createStockSystem({ spawn: models.spawn, addItem: items.addItem, slots: shelfSlots });
 const { printerLoaded, shopShelvesLoaded, counterLoaded } = createFurniture({ spawn: models.spawn, ...stock });
 printer = createPrinterSystem({
     scene,
@@ -54,11 +62,13 @@ models.ready().then(() => printer.initialize());
 
 const npcSpeech = createNPCSpeech();
 const register = createRegister(scene, counterLoaded);
+const belt = createBelt(scene, counterLoaded);
 customers = createCustomerController({
     scene,
     collides: collisions.collides,
     items,
     register,
+    belt,
     speech: npcSpeech,
     shelvesLoaded: shopShelvesLoaded,
     counterLoaded,
@@ -81,6 +91,7 @@ function animate(time) {
     if (controls.playing) {
         doors.update(dt, player.state, customers.positions());
         customers.update(dt);
+        belt.update(dt);
         npcSpeech.update(dt);
         items.update(dt);
         animations.update(dt);

@@ -28,6 +28,9 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
     const PUDDLE_GROWTH = 0.03;
     const MAX_PUDDLE = 3;
     const SCRUB_AMOUNT = 0.5;
+    // How far past the puddle's edge the mop still reaches, and the size below which it's gone
+    const SCRUB_MARGIN = 1.2;
+    const CLEAN_BELOW = 0.3;
 
     // Dropped from above onto whatever is there, so it lands on top if something was left on the spot
     const CARTRIDGE_SPOT = new THREE.Vector3(-8, 10, -INNER + 0.8);
@@ -159,6 +162,15 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
             page.position.z = THREE.MathUtils.lerp(SLOT_START_Z, SLOT_END_Z, t);
         });
 
+        // Then it slips off the end and flutters down to the floor in front of the printer
+        const landX = randomBetween(-0.4, 0.4);
+        const landZ = SLOT_END_Z + randomBetween(0.4, 0.9);
+        const spin = randomBetween(-0.8, 0.8);
+        await tween(0.7, (t) => {
+            page.position.set(landX * t, SLOT_Y * (1 - t * t), THREE.MathUtils.lerp(SLOT_END_Z, landZ, t));
+            page.rotation.set(Math.sin(t * Math.PI) * 0.4, spin * t, 0);
+        });
+
         scene.attach(page);
         addItem(page, inked ? "print" : "paper");
     }
@@ -211,7 +223,8 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
     }
 
     function scrub(mop) {
-        setPuddleSize(puddleSize - SCRUB_AMOUNT);
+        const size = puddleSize - SCRUB_AMOUNT;
+        setPuddleSize(size < CLEAN_BELOW ? 0 : size);
         tween(0.25, (t) => {
             mop.rotation.z = Math.sin(t * Math.PI * 2) * 0.3;
         });
@@ -221,8 +234,11 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
         if (printer.group && isPartOf(hit?.object, printer.group)) feedPrinter(item);
     }
 
+    // Anywhere on or near the puddle; its blobs reach about 1.5 times its size from the middle
     function tryScrub(mop, hit) {
-        if (!hit || !isPartOf(hit.object, puddle)) return false;
+        if (!hit || !puddle.visible) return false;
+        const distance = Math.hypot(hit.point.x - puddle.position.x, hit.point.z - puddle.position.z);
+        if (distance > puddleSize * 1.5 + SCRUB_MARGIN) return false;
         scrub(mop);
         return true;
     }
