@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { wallMaterial, tileWall } from "./walls.js";
 import { WALL_HEIGHT, WALL_THICKNESS, D, PARTITION_X, STORAGE_DOOR, FRONT_DOOR } from "./layout.js";
 
 // Automatic sliding doors: a solid one into the storage room that opens for the player, and glass
@@ -8,7 +9,6 @@ const OPEN_DISTANCE = 4;
 const OPEN_TIME = 0.5;
 
 export function createDoors(scene, { surfaces, setSolid, addBarrier }) {
-    const wallMaterial = new THREE.MeshStandardMaterial({ color: 0xbbbbaa });
     const doors = [];
 
     function doorSounds(name) {
@@ -26,9 +26,10 @@ export function createDoors(scene, { surfaces, setSolid, addBarrier }) {
     function addLintel(x, z, width, depth) {
         const lintel = new THREE.Mesh(
             new THREE.BoxGeometry(width, WALL_HEIGHT - DOOR_HEIGHT, depth),
-            wallMaterial,
+            wallMaterial(),
         );
         lintel.position.set(x, (WALL_HEIGHT + DOOR_HEIGHT) / 2, z);
+        tileWall(lintel);
         scene.add(lintel);
     }
 

@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { wallMaterial, tileWall } from "./walls.js";
 import {
     ROOM_WIDTH, ROOM_DEPTH, WALL_HEIGHT, WALL_THICKNESS, W, D, PARTITION_X, STORAGE_DOOR, FRONT_DOOR,
 } from "./layout.js";
@@ -14,6 +15,7 @@ export function createEnvironment(scene, { surfaces, addSolid }) {
         new THREE.MeshStandardMaterial({ color: 0x777777 }),
     );
     floor.rotation.x = -Math.PI / 2;
+    floor.userData.isFloor = true;
     scene.add(floor);
     surfaces.push(floor);
 
@@ -37,7 +39,6 @@ export function createEnvironment(scene, { surfaces, addSolid }) {
         }
     }
 
-    const wallMaterial = new THREE.MeshStandardMaterial({ color: 0xbbbbaa });
 
     function addWall(x1, z1, x2, z2) {
         const wall = new THREE.Mesh(
@@ -46,9 +47,10 @@ export function createEnvironment(scene, { surfaces, addSolid }) {
                 WALL_HEIGHT,
                 Math.abs(z2 - z1) + WALL_THICKNESS,
             ),
-            wallMaterial,
+            wallMaterial(),
         );
         wall.position.set((x1 + x2) / 2, WALL_HEIGHT / 2, (z1 + z2) / 2);
+        tileWall(wall);
         scene.add(wall);
         addSolid(wall);
     }

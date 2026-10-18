@@ -1,6 +1,7 @@
 import * as THREE from "three";
+import { settings } from "../settings.js";
 
-export function createPlayer(camera, { collides }) {
+export function createPlayer(camera, { collides, bump }) {
     const EYE_HEIGHT = 4.2;
     const PLAYER_RADIUS = 0.6;
     const MOVE_SPEED = 8;
@@ -13,8 +14,9 @@ export function createPlayer(camera, { collides }) {
     const MOVE_KEYS = ["KeyW", "KeyA", "KeyS", "KeyD"];
 
     function look(dx, dy) {
-        player.yaw -= dx * MOUSE_SENSITIVITY;
-        player.pitch -= dy * MOUSE_SENSITIVITY;
+        const sensitivity = MOUSE_SENSITIVITY * settings.mouseSensitivity;
+        player.yaw -= dx * sensitivity;
+        player.pitch -= dy * sensitivity;
         player.pitch = THREE.MathUtils.clamp(player.pitch, -MAX_PITCH, MAX_PITCH);
     }
 
@@ -32,13 +34,16 @@ export function createPlayer(camera, { collides }) {
         const dz = -cos * move.y - sin * move.x;
 
         // Resolve each axis separately so the player slides along walls instead of sticking
-        if (!collides(player.x + dx, player.z, PLAYER_RADIUS, { player: true })) player.x += dx;
-        if (!collides(player.x, player.z + dz, PLAYER_RADIUS, { player: true })) player.z += dz;
+        // Blocked by walls and furniture, and by customers
+        const blocked = (x, z) => collides(x, z, PLAYER_RADIUS, { player: true }) ||
+            bump(player, { x, z }, PLAYER_RADIUS, (body) => body.player) !== null;
+        if (!blocked(player.x + dx, player.z)) player.x += dx;
+        if (!blocked(player.x, player.z + dz)) player.z += dz;
 
         camera.position.set(player.x, EYE_HEIGHT, player.z);
         camera.rotation.y = player.yaw;
         camera.rotation.x = player.pitch;
     }
 
-    return { state: player, keys, moveKeys: MOVE_KEYS, look, update: updatePlayer };
+    return { state: player, radius: PLAYER_RADIUS, keys, moveKeys: MOVE_KEYS, look, update: updatePlayer };
 }
