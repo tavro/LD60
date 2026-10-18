@@ -9,6 +9,7 @@ const mainPanel = document.querySelector("#main-panel");
 const settingsPanel = document.querySelector("#settings-panel");
 const shiftPanel = document.querySelector("#shift-panel");
 const volume = document.querySelector("#volume");
+const sfxVolume = document.querySelector("#sfx-volume");
 const brightness = document.querySelector("#brightness");
 
 export function showMenu() {
@@ -54,6 +55,7 @@ export function hideMenu() {
 
 
 volume.value = settings.volume;
+sfxVolume.value = settings.sfxVolume;
 brightness.value = settings.brightness;
 
 document.querySelector("#settings").addEventListener("click", () => {
@@ -69,6 +71,11 @@ document.querySelector("#settings-back").addEventListener("click", () => {
 volume.addEventListener("input", () => {
   settings.volume = Number(volume.value);
   // Apply settings.volume to your audio system here.
+});
+
+sfxVolume.addEventListener("input", () => {
+  settings.sfxVolume = Number(sfxVolume.value);
+  // Apply settings.sfxVolume to your audio system here.
 });
 
 brightness.addEventListener("input", () => {
