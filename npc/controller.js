@@ -3,7 +3,7 @@ import { W, D, PARTITION_X, FRONT_DOOR } from "../scene/layout.js";
 import { STOCK } from "../game/stock.js";
 import { randomBetween } from "../game/utils.js";
 import { BELT_START } from "../game/belt.js";
-import { createNPC } from "./npc.js";
+import { createNPC, disposeNPC } from "./npc.js";
 
 // AI can also drive this animation by passing the distance moved each frame.
 export function createWalkingAnimation(npc) {
@@ -82,6 +82,11 @@ const ARRIVE_DISTANCE = 0.15;
 // looking for another way
 const STUCK_SQUEEZE = 1;
 const STUCK_REPLAN = 3;
+// Within this distance of the next point they steer straight at it, since smoothed steering turns
+// too wide to reach it and they'd circle around it. Not getting any closer to it for NO_PROGRESS
+// seconds counts as reaching it when this close, or finding another way when not
+const STEER_DIRECT_WITHIN = 1.5;
+const NO_PROGRESS = 2;
 // How often they check whether someone has since stopped in their way, and replan around them
 const ROUTE_CHECK_EVERY = 0.5;
 const SQUEEZE_AFTER = 1.5;
@@ -291,7 +296,7 @@ export function createCustomerController({
     }
 
     function spawn(type = pickType(shift.day), wants = Array.from({ length: type.items }, () => pick(STOCK))) {
-        const npc = createNPC({ id: `customer-${++spawned}`, shirtColor: type.shirt ?? pick(SHIRTS) });
+        const npc = createNPC({ id: `customer-${++spawned}`, shirtColor: type.shirt ?? pick(SHIRTS), look: type.name });
         npc.scale.setScalar(type.scale ?? 1);
         npc.position.copy(OUTSIDE);
         scene.add(npc);
@@ -480,6 +485,7 @@ export function createCustomerController({
         }
         speech.clear(customer.npc);
         customer.npc.removeFromParent();
+        disposeNPC(customer.npc);
         customers.splice(customers.indexOf(customer), 1);
     }
 
@@ -680,6 +686,7 @@ export function createCustomerController({
         customer.squeezing = Math.max(customer.squeezing - dt, 0);
         customer.excuseIn -= dt;
         recheckRoute(customer, dt);
+        if (checkProgress(customer, next, remaining, dt)) return { dx: 0, dz: 0 };
 
         const radius = bodyRadius(customer);
         const ignore = (body) => body.customer === customer || (customer.squeezing > 0 && !body.player);
@@ -724,8 +731,8 @@ export function createCustomerController({
             steerX = dirX;
             steerZ = dirZ;
         }
-        // Eased in over a few frames
-        const ease = Math.min(STEER_RATE * dt, 1);
+        // Eased in over a few frames, except close to the point
+        const ease = remaining < STEER_DIRECT_WITHIN ? 1 : Math.min(STEER_RATE * dt, 1);
         const smoothX = (customer.steerX ?? steerX) + (steerX - (customer.steerX ?? steerX)) * ease;
         const smoothZ = (customer.steerZ ?? steerZ) + (steerZ - (customer.steerZ ?? steerZ)) * ease;
         const smooth = Math.hypot(smoothX, smoothZ) || 1;
@@ -757,6 +764,29 @@ export function createCustomerController({
             customer.squeezing = SQUEEZE_TIME;
         }
         return { dx: 0, dz: 0 };
+    }
+
+    // Whether they gave up on the point because they weren't getting any closer to it, like circling
+    // around it, either moving on from it or finding a new route
+    function checkProgress(customer, next, remaining, dt) {
+        // Waiting for someone to get out of the way isn't circling
+        if (customer.blocked > 0) customer.noProgress = 0;
+        if (customer.progressTarget !== next || remaining < customer.closest - 0.05) {
+            customer.progressTarget = next;
+            customer.closest = remaining;
+            customer.noProgress = 0;
+            return false;
+        }
+        customer.noProgress += dt;
+        if (customer.noProgress < NO_PROGRESS) return false;
+
+        customer.noProgress = 0;
+        if (remaining < STEER_DIRECT_WITHIN || customer.route.length > 1) {
+            customer.route.shift();
+        } else {
+            customer.route = findRoute(customer.npc.position, next, customer) ?? [next];
+        }
+        return true;
     }
 
     // Someone may have stopped on the way since the route was planned; if so, go around them. Not

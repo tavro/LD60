@@ -13,11 +13,11 @@ export function createControls({ renderer, player, interact, onPlay = () => {}, 
     let stopped = false;
 
     function resume() {
-		playSfx("click");
+        playSfx("click");
         stopped = false;
         hideMenu();
         playing = true;
-        renderer.domElement.requestPointerLock();
+        lockPointer();
     }
 
     document.querySelector("#play").addEventListener("click", () => {
@@ -63,12 +63,42 @@ export function createControls({ renderer, player, interact, onPlay = () => {}, 
     renderer.domElement.addEventListener("mousedown", (e) => {
         if (e.button !== 0 || !playing) return;
         if (document.pointerLockElement === renderer.domElement) interact();
-        else renderer.domElement.requestPointerLock();
+        else lockPointer();
+    });
+
+    // Other buttons do nothing in the game. Left to the browser, a right click opens its menu and a
+    // middle click starts scrolling, and either releases the mouse, which opens the pause menu
+    for (const event of ["contextmenu", "auxclick"]) {
+        document.addEventListener(event, (e) => {
+            if (playing) e.preventDefault();
+        });
+    }
+    document.addEventListener("mousedown", (e) => {
+        if (playing && e.button !== 0) e.preventDefault();
     });
     window.addEventListener("mousemove", (e) => {
         if (document.pointerLockElement !== renderer.domElement) return;
         player.look(e.movementX, e.movementY);
     });
+
+	// Raw mouse input avoids Chrome/Edge on Windows occasionally reporting huge fake movements
+	function lockPointer() {
+		const canvas = renderer.domElement;
+		let request;
+		try {
+			request = canvas.requestPointerLock({ unadjustedMovement: true });
+		} catch {
+			request = null;
+		}
+		if (!request) return; // Browser doesn't return a promise; nothing more to do
+		request.catch((error) => {
+			// Raw input not supported here, so fall back to a normal lock
+			if (error.name === "NotSupportedError") {
+				canvas.requestPointerLock()?.catch?.(() => {});
+			}
+			// Any other failure (e.g. clicking again right after Escape) is harmless; ignore it
+		});
+	}
 
     return { stop, resume, get playing() { return playing; } };
 }

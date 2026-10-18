@@ -12,3 +12,6 @@ export const PARTITION_X = -4;
 // by the desk. Wall ends reach WALL_THICKNESS / 2 into the opening, so the clear gap is a bit narrower
 export const STORAGE_DOOR = { z: -7.75, width: 3.5 };
 export const FRONT_DOOR = { x: 10, width: 3.5 };
+
+// Ceiling light panels, by their x and z; each one also shines a light down into the room
+export const LIGHT_PANELS = [-14, -8, 2, 10, 16].flatMap((x) => [-8, 0, 8].map((z) => [x, z]));

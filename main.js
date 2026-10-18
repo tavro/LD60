@@ -1,9 +1,12 @@
 import * as THREE from "three";
+import { fontReady } from "./game/font.js";
+import "./game/cursors.js";
 import { createRendering } from "./scene/rendering.js";
 import { createEnvironment } from "./scene/environment.js";
 import { createModelSpawner } from "./scene/models.js";
 import { createFurniture } from "./scene/furniture.js";
 import { createDoors } from "./scene/doors.js";
+import { createLighting } from "./scene/lighting.js";
 import { createCollisionSystem } from "./game/collisions.js";
 import { createPlayer } from "./game/player.js";
 import { createControls } from "./game/controls.js";
@@ -25,7 +28,11 @@ import { createCustomerController } from "./npc/controller.js";
 import { createNPCSpeech } from "./npc/speech.js";
 import { showShiftPanel, setMenuOptions } from "./menu/menu.js";
 
-const { scene, camera, renderer } = createRendering();
+// Text on boxes, signs and menus is drawn in the pixel font, so it has to be loaded first
+await fontReady;
+
+const { scene, camera, renderer, composer } = createRendering();
+const lighting = createLighting(scene);
 const collisions = createCollisionSystem();
 createEnvironment(scene, collisions);
 const doors = createDoors(scene, collisions);
@@ -104,6 +111,15 @@ customers = createCustomerController({
     shelvesLoaded: shopShelvesLoaded,
     counterLoaded,
 });
+// Customers shove loose items out of their way
+physics.setMovers(() => customers.bodies().map(({ x, z, radius, customer }) => ({
+    key: customer,
+    x,
+    z,
+    radius,
+    height: 4 * (customer.type.scale ?? 1),
+})));
+
 // Customers and the player bump into each other
 collisions.setBodies(() => [
     { x: player.state.x, z: player.state.z, radius: player.radius, player: true },
@@ -184,7 +200,7 @@ const tutorial = createTutorial({
     counterLoaded,
     onFinish: ({ skipped }) => {
         customers.clear();
-        setMenuOptions({ play: "▶ Back to work", tutorial: false, skip: false });
+        setMenuOptions({ play: "Back to work", tutorial: false, skip: false });
         if (skipped) {
             beginShift(1);
             controls.resume();
@@ -199,7 +215,7 @@ const tutorial = createTutorial({
                 "Keep shelves stocked, the floor clean and the line moving.",
                 "Hit the target to bank the money and buy upgrades.",
             ],
-            button: "▶ Start day 1",
+            button: "Start day 1",
             onContinue: () => {
                 beginShift(1);
                 controls.resume();
@@ -210,7 +226,7 @@ const tutorial = createTutorial({
 
 document.querySelector("#tutorial").addEventListener("click", () => {
     register.show({ day: 0, time: "Training" });
-    setMenuOptions({ play: "▶ Back to work", tutorial: false, skip: true });
+    setMenuOptions({ play: "Back to work", tutorial: false, skip: true });
     tutorial.begin();
     controls.resume();
 });
@@ -297,7 +313,8 @@ function animate(time) {
     shiftButton.update(dt);
     music.update(player.state.x);
     applySettings(renderer, music);
-    renderer.render(scene, camera);
+    lighting.update(dt);
+    composer.render();
 }
 
 renderer.setAnimationLoop(animate);

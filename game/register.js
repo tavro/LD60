@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { PIXEL_FONT, pixelCanvasTexture } from "./font.js";
 import { settings } from "../settings.js";
 
 // Sign hanging over the counter with how the shift is going, readable from the shop floor and from
@@ -8,11 +9,11 @@ export function createRegister(scene, counterLoaded) {
     moneySound.preload = "auto";
     moneySound.volume = 0.6;
 
+    // Small, so the pixel font's pixels show
     const canvas = document.createElement("canvas");
-    canvas.width = 512;
-    canvas.height = 256;
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.colorSpace = THREE.SRGBColorSpace;
+    canvas.width = 160;
+    canvas.height = 80;
+    const texture = pixelCanvasTexture(canvas);
     let shown = "";
 
     // `status` has the day, the time left as text, takings and target, walkouts and the most allowed,
@@ -25,30 +26,34 @@ export function createRegister(scene, counterLoaded) {
         const ctx = canvas.getContext("2d");
         ctx.fillStyle = "#f4f4ef";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.strokeStyle = rush ? "#c8322a" : "#222";
-        ctx.lineWidth = 24;
-        ctx.strokeRect(12, 12, canvas.width - 24, canvas.height - 24);
+        ctx.fillStyle = rush ? "#c8322a" : "#222";
+        ctx.fillRect(0, 0, canvas.width, 4);
+        ctx.fillRect(0, canvas.height - 4, canvas.width, 4);
+        ctx.fillRect(0, 0, 4, canvas.height);
+        ctx.fillRect(canvas.width - 4, 0, 4, canvas.height);
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
+        const middle = canvas.width / 2;
+        const fit = canvas.width - 14;
 
         // Day 0 is before the first shift, or training
         if (day === 0) {
             ctx.fillStyle = "#222";
-            ctx.font = "bold 92px sans-serif";
-            ctx.fillText(time, canvas.width / 2, canvas.height / 2, canvas.width - 64);
+            ctx.font = `16px ${PIXEL_FONT}`;
+            ctx.fillText(time, middle, canvas.height / 2 + 2, fit);
             texture.needsUpdate = true;
             return;
         }
 
-        ctx.font = "bold 38px sans-serif";
+        ctx.font = `8px ${PIXEL_FONT}`;
         ctx.fillStyle = rush ? "#c8322a" : "#222";
-        ctx.fillText(rush ? `RUSH HOUR · ${time}` : `Day ${day} · ${time}`, canvas.width / 2, 58);
-        ctx.font = "bold 92px sans-serif";
+        ctx.fillText(rush ? `RUSH HOUR · ${time}` : `Day ${day} · ${time}`, middle, 17, fit);
+        ctx.font = `16px ${PIXEL_FONT}`;
         ctx.fillStyle = takings >= target ? "#2e9a48" : "#222";
-        ctx.fillText(`$${takings} / $${target}`, canvas.width / 2, 132, canvas.width - 64);
-        ctx.font = "bold 38px sans-serif";
+        ctx.fillText(`$${takings} / $${target}`, middle, 42, fit);
+        ctx.font = `8px ${PIXEL_FONT}`;
         ctx.fillStyle = walkouts ? "#c8322a" : "#222";
-        ctx.fillText(`Walkouts: ${walkouts} / ${maxWalkouts}`, canvas.width / 2, 204);
+        ctx.fillText(`Walkouts: ${walkouts} / ${maxWalkouts}`, middle, 66, fit);
         texture.needsUpdate = true;
     }
 

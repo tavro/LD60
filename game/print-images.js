@@ -1,33 +1,20 @@
 import * as THREE from "three";
 
-// Memes from these subreddits, through meme-api.com. Both it and i.redd.it send CORS headers,
-// which WebGL needs to use the images
-const MEME_SUBREDDITS = ["ItalianBrainrot", "shitposting"];
-const MEME_BATCH = 20;
-let memeUrls = [];
+// Character memes with little text, picked from r/ItalianBrainrot and r/Bossfight and bundled with
+// the game, so printing works offline and wherever the game is hosted. They're dealt out in a
+// random order, all of them before any repeats
+const PRINTS = Object.values(import.meta.glob("./prints/*.jpg", { eager: true, query: "?url", import: "default" }));
+let deck = [];
 
-async function nextMemeUrl() {
-    if (memeUrls.length === 0) {
-        const subreddit = MEME_SUBREDDITS[Math.floor(Math.random() * MEME_SUBREDDITS.length)];
-        const response = await fetch(`https://meme-api.com/gimme/${subreddit}/${MEME_BATCH}`);
-        const { memes } = await response.json();
-        memeUrls = memes
-            .filter((meme) => !meme.nsfw && !meme.spoiler && /\.(png|jpe?g)$/i.test(meme.url))
-            .map((meme) => meme.url);
-    }
-    const url = memeUrls.pop();
-    if (!url) throw new Error("No usable memes in batch");
-    return url;
+function nextPrintUrl() {
+    if (deck.length === 0) deck = [...PRINTS].sort(() => Math.random() - 0.5);
+    return deck.pop();
 }
 
-// A random meme fitted onto a white page, or a doodle if that doesn't load in time
+// A random meme stretched over a whole page, or a doodle if it can't be loaded
 export function randomImage() {
-    const download = nextMemeUrl()
-        .then((url) => new THREE.ImageLoader().loadAsync(url))
-        .then(onPage);
-    const timeout = new Promise((_, reject) => setTimeout(reject, 8000));
-
-    return Promise.race([download, timeout])
+    return new THREE.ImageLoader().loadAsync(nextPrintUrl())
+        .then(onPage)
         .catch(doodle)
         .then((texture) => {
             texture.colorSpace = THREE.SRGBColorSpace;
@@ -35,22 +22,12 @@ export function randomImage() {
         });
 }
 
+// Stretched to cover the whole page, edge to edge
 function onPage(image) {
     const canvas = document.createElement("canvas");
     canvas.width = 400;
     canvas.height = 566;
-    const ctx = canvas.getContext("2d");
-    ctx.fillStyle = "#f4f4ef";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    const margin = 16;
-    const scale = Math.min(
-        (canvas.width - margin * 2) / image.width,
-        (canvas.height - margin * 2) / image.height,
-    );
-    const width = image.width * scale;
-    const height = image.height * scale;
-    ctx.drawImage(image, (canvas.width - width) / 2, (canvas.height - height) / 2, width, height);
+    canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);
     return new THREE.CanvasTexture(canvas);
 }
 

@@ -53,6 +53,36 @@ export function createPhysics({ footprints }) {
     // origin at the bottom)
     const loose = new Map();
 
+    // Moving people, like customers, as upright cylinders that shove loose items out of their way.
+    // `getMovers` returns { key, x, z, radius, height } for each; bodies come and go with them
+    let getMovers = () => [];
+    const movers = new Map();
+
+    function syncMovers(dt) {
+        const current = new Set();
+        for (const { key, x, z, radius, height } of getMovers()) {
+            current.add(key);
+            let body = movers.get(key);
+            if (!body) {
+                body = new CANNON.Body({
+                    type: CANNON.Body.KINEMATIC,
+                    shape: new CANNON.Cylinder(radius, radius, height, 8),
+                });
+                body.position.set(x, height / 2, z);
+                world.addBody(body);
+                movers.set(key, body);
+            }
+            // Moved by its velocity over the step rather than placed, so what it walks into gets
+            // pushed rather than passed through
+            body.velocity.set((x - body.position.x) / dt, 0, (z - body.position.z) / dt);
+        }
+        for (const [key, body] of movers) {
+            if (current.has(key)) continue;
+            world.removeBody(body);
+            movers.delete(key);
+        }
+    }
+
     function wakeAll() {
         for (const body of world.bodies) body.wakeUp();
     }
@@ -115,6 +145,7 @@ export function createPhysics({ footprints }) {
 
     function update(dt) {
         syncStatics();
+        if (dt > 0) syncMovers(dt);
         // Small steps, so fast items can't skip through a thin wall between two of them
         world.step(1 / 120, dt, 10);
 
@@ -130,5 +161,9 @@ export function createPhysics({ footprints }) {
         }
     }
 
-    return { addLoose, throwItem, release, update, isLoose: (item) => loose.has(item) };
+    return {
+        addLoose, throwItem, release, update,
+        isLoose: (item) => loose.has(item),
+        setMovers: (list) => { getMovers = list; },
+    };
 }

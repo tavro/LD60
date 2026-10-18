@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { PIXEL_FONT, pixelCanvasTexture } from "./font.js";
 
 function pick(list) {
     return list[Math.floor(Math.random() * list.length)];
@@ -6,7 +7,8 @@ function pick(list) {
 
 // The items that get restocked, each with a color shared by its box stickers and shelf signs
 export const STOCK = [
-    { label: "Item 1", color: "#c8322a", price: 3 },
+    // `model` and `scale` are the item's model, if it isn't a placeholder box
+    { label: "Mouse", color: "#c8322a", price: 3, model: "mouse", scale: 2 },
     { label: "Item 2", color: "#2a6fc8", price: 5 },
     { label: "Item 3", color: "#2e9a48", price: 8 },
     { label: "Item 4", color: "#e09a12", price: 12 },
@@ -50,24 +52,26 @@ export function createStockSystem({ spawn, addItem, slots }) {
     function labelTexture({ label, color }, price) {
         const key = `${label} $${price}`;
         if (!labelTextures[key]) {
+            // Small, so the pixel font's pixels show
             const canvas = document.createElement("canvas");
-            canvas.width = 512;
-            canvas.height = 192;
+            canvas.width = 96;
+            canvas.height = 36;
+            // Bars of the item's color around the edge
             const ctx = canvas.getContext("2d");
             ctx.fillStyle = "#f4f4ef";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.strokeStyle = color;
-            ctx.lineWidth = 24;
-            ctx.strokeRect(12, 12, canvas.width - 24, canvas.height - 24);
+            ctx.fillStyle = color;
+            ctx.fillRect(0, 0, canvas.width, 4);
+            ctx.fillRect(0, canvas.height - 4, canvas.width, 4);
+            ctx.fillRect(0, 0, 4, canvas.height);
+            ctx.fillRect(canvas.width - 4, 0, 4, canvas.height);
             ctx.fillStyle = "#222";
-            ctx.font = "bold 88px sans-serif";
+            ctx.font = `8px ${PIXEL_FONT}`;
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
-            ctx.fillText(key, canvas.width / 2, canvas.height / 2, canvas.width - 64);
+            ctx.fillText(key, canvas.width / 2, canvas.height / 2, canvas.width - 10);
 
-            const texture = new THREE.CanvasTexture(canvas);
-            texture.colorSpace = THREE.SRGBColorSpace;
-            labelTextures[key] = texture;
+            labelTextures[key] = pixelCanvasTexture(canvas);
         }
         return labelTextures[key];
     }
@@ -91,7 +95,13 @@ export function createStockSystem({ spawn, addItem, slots }) {
     }
 
     async function placeBox(slot, onTaken = null) {
-        const item = await spawn("placeholder", { ...slot.position, rotation: slot.rotation, solid: false });
+        const { stock } = slot;
+        const item = await spawn(stock.model ?? "placeholder", {
+            ...slot.position,
+            rotation: slot.rotation,
+            scale: stock.scale ?? 1,
+            solid: false,
+        });
         // Own materials so highlighting one item doesn't light up all of them
         item.traverse((child) => {
             if (!child.isMesh) return;
@@ -101,7 +111,6 @@ export function createStockSystem({ spawn, addItem, slots }) {
         });
 
         // `slot.tagPrice` sets the sticker's price instead of leaving it to chance
-        const { stock } = slot;
         const wrong = Math.random() < WRONG_TAG_CHANCE;
         const tagPrice = slot.tagPrice ?? (wrong ? Math.max(1, stock.price + pick(WRONG_TAG_OFFSETS)) : stock.price);
 
@@ -109,7 +118,16 @@ export function createStockSystem({ spawn, addItem, slots }) {
             LABEL_GEOMETRY,
             new THREE.MeshStandardMaterial({ map: labelTexture(stock, tagPrice) }),
         );
-        label.position.set(0, 0.5, 0.505);
+        // On the front of boxes, or lying on top of flat things like the mouse, tilted towards the
+        // front, sized to fit
+        const size = item.userData.size;
+        if (size.y >= 0.6) {
+            label.position.set(0, size.y / 2, size.z / 2 + 0.005);
+        } else {
+            label.position.set(0, size.y + 0.02, 0);
+            label.rotation.x = -Math.PI / 2 + 0.6;
+            label.scale.setScalar(Math.min(1, size.x / 0.9));
+        }
         item.add(label);
         item.userData.label = stock.label;
         item.userData.tagPrice = tagPrice;

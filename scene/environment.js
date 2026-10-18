@@ -2,41 +2,39 @@ import * as THREE from "three";
 import { wallMaterial, tileWall } from "./walls.js";
 import {
     ROOM_WIDTH, ROOM_DEPTH, WALL_HEIGHT, WALL_THICKNESS, W, D, PARTITION_X, STORAGE_DOOR, FRONT_DOOR,
+    LIGHT_PANELS,
 } from "./layout.js";
 
 export function createEnvironment(scene, { surfaces, addSolid }) {
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x444444, 1.5));
-    const light = new THREE.DirectionalLight(0xffffff, 1.5);
-    light.position.set(10, 20, 5);
-    scene.add(light);
-
     const floor = new THREE.Mesh(
         new THREE.PlaneGeometry(ROOM_WIDTH, ROOM_DEPTH),
         new THREE.MeshStandardMaterial({ color: 0x777777 }),
     );
     floor.rotation.x = -Math.PI / 2;
     floor.userData.isFloor = true;
+    floor.userData.shadow = "receive";
     scene.add(floor);
     surfaces.push(floor);
 
     const ceiling = new THREE.Mesh(
         new THREE.PlaneGeometry(ROOM_WIDTH, ROOM_DEPTH),
         // Faces away from the lights, so it glows a little as if lit by the panels
-        new THREE.MeshStandardMaterial({ color: 0xd8d8d0, emissive: 0x6a6a64 }),
+        new THREE.MeshStandardMaterial({ color: 0xb8b0a4, emissive: 0x2a241e }),
     );
+    // Casting a shadow, it would block the key light above and put the whole room in shade
+    ceiling.userData.shadow = "none";
     ceiling.rotation.x = Math.PI / 2;
     ceiling.position.y = WALL_HEIGHT;
     scene.add(ceiling);
 
-    // Fluorescent light panels in a grid on the ceiling
+    // Fluorescent light panels in a grid on the ceiling, bright enough for a gentle glow
     const panelGeometry = new THREE.BoxGeometry(3, 0.1, 1);
-    const panelMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xf4f4ea });
-    for (const x of [-14, -8, 2, 10, 16]) {
-        for (const z of [-8, 0, 8]) {
-            const panel = new THREE.Mesh(panelGeometry, panelMaterial);
-            panel.position.set(x, WALL_HEIGHT - 0.05, z);
-            scene.add(panel);
-        }
+    const panelMaterial = new THREE.MeshStandardMaterial({ color: 0xf2e8d8, emissive: 0xf2e6d2, emissiveIntensity: 1.6 });
+    for (const [x, z] of LIGHT_PANELS) {
+        const panel = new THREE.Mesh(panelGeometry, panelMaterial);
+        panel.position.set(x, WALL_HEIGHT - 0.05, z);
+        panel.userData.shadow = "none";
+        scene.add(panel);
     }
 
 
@@ -72,5 +70,6 @@ export function createEnvironment(scene, { surfaces, addSolid }) {
     );
     sidewalk.rotation.x = -Math.PI / 2;
     sidewalk.position.set(FRONT_DOOR.x, 0, D + 4);
+    sidewalk.userData.shadow = "receive";
     scene.add(sidewalk);
 }
