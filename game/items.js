@@ -215,18 +215,22 @@ export function createItemSystem({ scene, camera, player, surfaces, slots, getEx
         else if (target) pickUp(target);
     }
 
+    function isOnShelf(item, shelf) {
+        shelf.updateWorldMatrix(true, false);
+        const { x: width, y: height, z: depth } = shelf.userData.size;
+        const local = shelf.worldToLocal(item.getWorldPosition(new THREE.Vector3()));
+        return Math.abs(local.x) <= width / 2 && Math.abs(local.z) <= depth / 2 &&
+            local.y >= 0 && local.y <= height;
+    }
+
     // A box with the given label (or any box, for null) standing on the shelf, that nobody has
     // claimed
     function findShelfItem(shelf, label) {
-        shelf.updateWorldMatrix(true, false);
-        const { x: width, y: height, z: depth } = shelf.userData.size;
         return items.find((item) => {
             if (item === held || item.userData.carrier || item.userData.forSale) return false;
             if (item.userData.kind !== "box" || !item.visible) return false;
             if (label !== null && item.userData.label !== label) return false;
-            const local = shelf.worldToLocal(item.getWorldPosition(new THREE.Vector3()));
-            return Math.abs(local.x) <= width / 2 && Math.abs(local.z) <= depth / 2 &&
-                local.y >= 0 && local.y <= height;
+            return isOnShelf(item, shelf);
         });
     }
 
@@ -265,7 +269,8 @@ export function createItemSystem({ scene, camera, player, surfaces, slots, getEx
     }
 
     return {
-        addItem, removeItem, firstHit, interact, update, findShelfItem, takeForNPC, placeFromNPC,
+        addItem, removeItem, firstHit, interact, update, findShelfItem, isOnShelf, takeForNPC, placeFromNPC,
         list: () => items,
+        heldKind: () => held?.userData.kind ?? null,
     };
 }

@@ -11,7 +11,7 @@ export function createRegister(scene, counterLoaded) {
     let shown = "";
 
     // `status` has the day, the time left as text, takings and target, walkouts and the most allowed,
-    // and whether it's rush hour
+    // and whether it's rush hour. On day 0 it just shows `time` as a message
     function show({ day, time, takings, target, walkouts, maxWalkouts, rush }) {
         const text = JSON.stringify([day, time, takings, target, walkouts, rush]);
         if (text === shown) return;
@@ -25,6 +25,15 @@ export function createRegister(scene, counterLoaded) {
         ctx.strokeRect(12, 12, canvas.width - 24, canvas.height - 24);
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
+
+        // Day 0 is before the first shift, or training
+        if (day === 0) {
+            ctx.fillStyle = "#222";
+            ctx.font = "bold 92px sans-serif";
+            ctx.fillText(time, canvas.width / 2, canvas.height / 2, canvas.width - 64);
+            texture.needsUpdate = true;
+            return;
+        }
 
         ctx.font = "bold 38px sans-serif";
         ctx.fillStyle = rush ? "#c8322a" : "#222";

@@ -28,3 +28,31 @@ body {
   /* Above the canvas, which menu.css puts at z-index 0 */
   z-index: 1;
 }
+
+/* Tutorial instructions, styled like the menu card */
+#tutorial-card {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(560px, calc(100% - 32px));
+  padding: 14px 20px;
+  font: bold 18px/1.4 "Helvetica Neue", Arial, sans-serif;
+  color: #222;
+  background: #f4f4ef;
+  border: 5px solid #222;
+  box-shadow: 6px 6px 0 rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+  z-index: 1;
+}
+
+#tutorial-card[hidden] {
+  display: none;
+}
+
+#tutorial-card small {
+  display: block;
+  font-size: 13px;
+  letter-spacing: 2px;
+  color: #c8322a;
+}

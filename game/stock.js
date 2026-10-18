@@ -100,9 +100,10 @@ export function createStockSystem({ spawn, addItem, slots }) {
                 : child.material.clone();
         });
 
+        // `slot.tagPrice` sets the sticker's price instead of leaving it to chance
         const { stock } = slot;
         const wrong = Math.random() < WRONG_TAG_CHANCE;
-        const tagPrice = wrong ? Math.max(1, stock.price + pick(WRONG_TAG_OFFSETS)) : stock.price;
+        const tagPrice = slot.tagPrice ?? (wrong ? Math.max(1, stock.price + pick(WRONG_TAG_OFFSETS)) : stock.price);
 
         const label = new THREE.Mesh(
             LABEL_GEOMETRY,

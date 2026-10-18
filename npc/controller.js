@@ -132,6 +132,8 @@ export function createCustomerController({
     let patienceBoost = 1;
     let alarm = false;
     let grumpiness = 1;
+    // Running totals, for the tutorial to follow along
+    const stats = { sold: 0, printsGiven: 0, caught: 0, escaped: 0 };
 
     Promise.all([shelvesLoaded, counterLoaded]).then(([loadedShelves, loadedCounter]) => {
         shelves = loadedShelves;
@@ -229,8 +231,7 @@ export function createCustomerController({
         return matchingShelves(label).find((shelf) => items.findShelfItem(shelf, label));
     }
 
-    function spawn() {
-        const type = pickType(shift.day);
+    function spawn(type = pickType(shift.day), wants = Array.from({ length: type.items }, () => pick(STOCK))) {
         const npc = createNPC({ id: `customer-${++spawned}`, shirtColor: type.shirt ?? pick(SHIRTS) });
         npc.scale.setScalar(type.scale ?? 1);
         npc.position.copy(OUTSIDE);
@@ -239,7 +240,7 @@ export function createCustomerController({
             npc,
             type,
             walk: createWalkingAnimation(npc),
-            wants: Array.from({ length: type.items }, () => pick(STOCK)),
+            wants,
             state: "entering",
             route: [INSIDE.clone()],
             moving: true,
@@ -427,6 +428,7 @@ export function createCustomerController({
             takeFromShelf(customer);
         } else if (customer.state === "escaping") {
             // Got away with it
+            stats.escaped++;
             shift.walkout();
             despawn(customer);
         } else if (customer.state === "leaving") {
@@ -477,6 +479,8 @@ export function createCustomerController({
 
     // Pays, with a tip from those who pay extra, and leaves
     function pay(customer, amount) {
+        if (customer.type.name === "printOrder") stats.printsGiven++;
+        else stats.sold++;
         const total = Math.round(amount * customer.type.pays);
         shift.earn(total);
         say(customer.npc, `Thanks! $${total}`);
@@ -491,6 +495,7 @@ export function createCustomerController({
         if (customer.type.steals && customer.items.length) {
             say(customer.npc, "Sorry...");
             shift.earn(CATCH_REWARD);
+            stats.caught++;
             leave(customer);
         } else if (customer.state !== "escaping") {
             say(customer.npc, "How rude!");
@@ -611,8 +616,15 @@ export function createCustomerController({
         queue.length = 0;
     }
 
+    // A customer of the given type, with `overrides` for its type settings and `wants` for what it
+    // buys, e.g. a patient one for the tutorial
+    function spawnCustomer(name, { wants, ...overrides } = {}) {
+        const type = { name, ...TYPES[name], ...overrides };
+        spawn(type, wants);
+    }
+
     return {
-        update, reset, clear, use, give,
+        update, reset, clear, use, give, spawnCustomer, stats,
         addShelf: (shelf) => shelves.push(shelf),
         setPatienceBoost: (boost) => { patienceBoost = boost; },
         setAlarm: (on) => { alarm = on; },

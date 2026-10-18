@@ -121,5 +121,5 @@ export function createMesses({ scene, items, tween }) {
         return true;
     }
 
-    return { addSpill, update, count, tryScrub };
+    return { addSpill, update, count, tryScrub, spillCount: () => spills.length };
 }

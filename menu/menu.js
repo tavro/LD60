@@ -18,6 +18,13 @@ export function showMenu() {
     menu.style.display = "flex";
 }
 
+// Which tutorial buttons the main menu shows, and the play button's label
+export function setMenuOptions({ play, tutorial, skip }) {
+    document.querySelector("#play").textContent = play;
+    document.querySelector("#tutorial").hidden = !tutorial;
+    document.querySelector("#skip-tutorial").hidden = !skip;
+}
+
 // The screen between shifts. `upgrades` are buttons with a label, a description, whether they can
 // be bought and what happens when they are
 export function showShiftPanel({ title, lines, upgrades = [], button, onContinue }) {

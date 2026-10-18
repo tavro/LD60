@@ -16,10 +16,11 @@ import { applySettings } from "./game/settings.js";
 import { createRegister } from "./game/register.js";
 import { createShift } from "./game/shift.js";
 import { createMesses } from "./game/messes.js";
+import { createTutorial } from "./game/tutorial.js";
 import { createBelt } from "./game/belt.js";
 import { createCustomerController } from "./npc/controller.js";
 import { createNPCSpeech } from "./npc/speech.js";
-import { showShiftPanel } from "./menu/menu.js";
+import { showShiftPanel, setMenuOptions } from "./menu/menu.js";
 
 const { scene, camera, renderer } = createRendering();
 const collisions = createCollisionSystem();
@@ -46,6 +47,7 @@ const items = createItemSystem({
     onDrop: (item, hit) => {
         printer.handleDrop(item, hit);
         belt.handleDrop(item);
+        tutorial.onDrop(item);
     },
     onMopUse: (mop, hit) => printer.tryScrub(mop, hit) || messes.tryScrub(mop, hit),
     onUse: (hit) => customers.use(hit),
@@ -87,10 +89,59 @@ const controls = createControls({
     player,
     interact: items.interact,
     onPlay: () => {
-        if (shift.day === 0) shift.start(1);
+        if (tutorial.active || shift.day !== 0) return;
+        shift.start(1);
+        setMenuOptions({ play: "▶ Back to work", tutorial: false, skip: false });
     },
     onPause: customers.reset,
 });
+
+// Tutorial, from the menu before the first shift
+
+register.show({ day: 0, time: "Welcome!" });
+
+const tutorial = createTutorial({
+    player: player.state,
+    items,
+    printer,
+    customers,
+    messes,
+    placeBox: stock.placeBox,
+    shelvesLoaded: shopShelvesLoaded,
+    counterLoaded,
+    onFinish: ({ skipped }) => {
+        customers.clear();
+        setMenuOptions({ play: "▶ Back to work", tutorial: false, skip: false });
+        if (skipped) {
+            shift.start(1);
+            controls.resume();
+            return;
+        }
+        controls.stop();
+        showShiftPanel({
+            title: "You're ready!",
+            lines: [
+                "Each shift has a money target: sell enough before closing time.",
+                "Five walkouts end the shift early.",
+                "Keep shelves stocked, the floor clean and the line moving.",
+                "Hit the target to bank the money and buy upgrades.",
+            ],
+            button: "▶ Start day 1",
+            onContinue: () => {
+                shift.start(1);
+                controls.resume();
+            },
+        });
+    },
+});
+
+document.querySelector("#tutorial").addEventListener("click", () => {
+    register.show({ day: 0, time: "Training" });
+    setMenuOptions({ play: "▶ Back to work", tutorial: false, skip: true });
+    tutorial.begin();
+    controls.resume();
+});
+document.querySelector("#skip-tutorial").addEventListener("click", () => tutorial.skip());
 
 // Between shifts: the result, and upgrades to buy after a good one
 
@@ -150,6 +201,7 @@ function animate(time) {
         doors.update(dt, player.state, customers.positions());
         customers.update(dt);
         shift.update(dt, customers.count());
+        tutorial.update();
         messes.update(player.state, printer.inInk(player.state.x, player.state.z));
         belt.update(dt);
         npcSpeech.update(dt);

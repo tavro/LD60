@@ -18,8 +18,7 @@ export function createControls({ renderer, player, interact, onPlay = () => {}, 
         renderer.domElement.requestPointerLock();
     }
 
-    document.querySelector("#play").addEventListener("click", (event) => {
-        event.currentTarget.textContent = "▶ Back to work";
+    document.querySelector("#play").addEventListener("click", () => {
         onPlay();
         resume();
     });

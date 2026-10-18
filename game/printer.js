@@ -39,6 +39,8 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
 
     const printer = { group: null, ink: 1, leaking: false, leakIn: randomBetween(...LEAK_DELAY) };
     let printJobs = Promise.resolve();
+    // Running totals, for the tutorial to follow along
+    const stats = { prints: 0, retags: 0 };
     let dripTimer = 0;
 
     function makePaper(image = null) {
@@ -174,6 +176,7 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
 
         scene.attach(page);
         addItem(page, inked ? "print" : "paper");
+        if (inked) stats.prints++;
     }
 
     // Called with an item that was just dropped while looking at the printer. Boxes get a new
@@ -184,6 +187,7 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
             item.position.copy(printer.group.localToWorld(PRINTER_TOP.clone()));
             printer.ink -= INK_PER_STICKER;
             retag(item);
+            stats.retags++;
             tween(0.3, (t) => item.scale.setScalar(1 + Math.sin(t * Math.PI) * 0.15));
         }
         if (kind === "paper" || kind === "cartridge") {
@@ -256,5 +260,12 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
         return puddle.visible && Math.hypot(x - puddle.position.x, z - puddle.position.z) < puddleSize * 1.3;
     }
 
-    return { initialize, update: updatePrinter, puddle, handleDrop, tryScrub, inInk };
+    // A full cartridge with no leak for a while, as if one was just put in
+    function refill() {
+        printer.ink = 1;
+        printer.leaking = false;
+        printer.leakIn = randomBetween(...LEAK_DELAY);
+    }
+
+    return { initialize, update: updatePrinter, puddle, handleDrop, tryScrub, inInk, refill, stats };
 }
