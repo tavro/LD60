@@ -5,7 +5,17 @@ export function shiftStartProblems({ delivery, messes, printer }) {
     const problems = [];
     if (delivery.unpacking) problems.push("Wait for the delivery to finish unpacking.");
     else if (delivery.remaining > 0) problems.push("Unpack the delivery carton in storage before starting the shift.");
-    if (messes.count() > 0) problems.push("Clean the shop: mop spills and footprints, and put loose products back on shelves.");
+    // Exactly what's left, so it can be found
+    const { spills, footprints, looseProducts } = messes.breakdown();
+    const left = [
+        [spills, "spill", "spills"],
+        [footprints, "footprint", "footprints"],
+        [looseProducts, "loose product", "loose products"],
+    ].filter(([n]) => n > 0).map(([n, one, many]) => `${n} ${n === 1 ? one : many}`);
+    if (left.length) {
+        const list = left.length > 1 ? `${left.slice(0, -1).join(", ")} and ${left.at(-1)}` : left[0];
+        problems.push(`Still in the shop: ${list}. Mop the floor and put products on shelves.`);
+    }
     if (printer.puddle.visible) problems.push("Mop up the ink puddle by the printer.");
     return problems;
 }
@@ -18,8 +28,8 @@ export function createShiftButton({ counterLoaded, onPress }) {
     base.position.y = 0.07;
     button.add(base);
     const material = new THREE.MeshStandardMaterial({ color: 0xc91c1c, emissive: 0xff1818, emissiveIntensity: 0 });
-    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.35, 0.2, 24), material);
-    cap.position.set(0, 0.24, 0.15);
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.24, 0.1, 24), material);
+    cap.position.set(0, 0.19, 0.15);
     button.add(cap);
     const light = new THREE.PointLight(0xff2424, 0, 3);
     light.position.set(0, 0.6, 0.15);
@@ -48,6 +58,8 @@ export function createShiftButton({ counterLoaded, onPress }) {
         const top = new THREE.Box3().setFromObject(counter).max.y;
         // Cashier's side wing, clear of the belt and its scanner. The counter is already raycastable.
         button.position.set(-1, top, -1);
+        // Turned so the label reads from the cashier's side
+        button.rotation.y = Math.PI;
         counter.add(button);
     });
 

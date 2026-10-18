@@ -79,12 +79,20 @@ export function createMesses({ scene, items, physics, tween }) {
         return object.position.x > PARTITION_X;
     }
 
+    // What's messing up the shop, by kind
+    function breakdown() {
+        return {
+            spills: spills.filter(inShop).length,
+            footprints: footprints.filter(inShop).length,
+            looseProducts: items.list().filter((item) =>
+                item.userData.kind === "box" && physics.isLoose(item) && inShop(item),
+            ).length,
+        };
+    }
+
     function count() {
-        const floorBoxes = items.list().filter((item) =>
-            item.userData.kind === "box" && physics.isLoose(item) && inShop(item),
-        ).length;
-        const shopFootprints = footprints.filter(inShop).length;
-        return spills.filter(inShop).length + Math.ceil(shopFootprints / FOOTPRINTS_PER_MESS) + floorBoxes;
+        const { spills, footprints, looseProducts } = breakdown();
+        return spills + Math.ceil(footprints / FOOTPRINTS_PER_MESS) + looseProducts;
     }
 
     function remove(list, object) {
@@ -116,5 +124,5 @@ export function createMesses({ scene, items, physics, tween }) {
         return true;
     }
 
-    return { addSpill, update, count, tryScrub, spillCount: () => spills.length };
+    return { addSpill, update, count, breakdown, tryScrub, spillCount: () => spills.length };
 }

@@ -83,13 +83,15 @@ export function createRendering() {
     // Renders the scene with bloom; the output pass applies the tone mapping and color space
     const composer = new EffectComposer(renderer);
     composer.addPass(new RenderPass(scene, camera));
-    composer.addPass(new HeldItemPass(scene, camera));
-    composer.addPass(new PixelBloomPass(
+    const heldPass = new HeldItemPass(scene, camera);
+    composer.addPass(heldPass);
+    const bloom = new PixelBloomPass(
         new THREE.Vector2(window.innerWidth / GLOW_PIXEL, window.innerHeight / GLOW_PIXEL),
         BLOOM.strength,
         BLOOM.radius,
         BLOOM.threshold,
-    ));
+    );
+    composer.addPass(bloom);
     composer.addPass(new OutputPass());
 
     window.addEventListener("resize", () => {
@@ -99,5 +101,5 @@ export function createRendering() {
         composer.setSize(window.innerWidth, window.innerHeight);
     });
 
-    return { scene, camera, renderer, composer };
+    return { scene, camera, renderer, composer, bloom, heldPass };
 }

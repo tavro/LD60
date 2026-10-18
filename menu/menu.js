@@ -14,6 +14,7 @@ const volume = document.querySelector("#volume");
 const sfxVolume = document.querySelector("#sfx-volume");
 const brightness = document.querySelector("#brightness");
 const mouseSensitivity = document.querySelector("#mouse-sensitivity");
+const graphics = document.querySelector("#graphics");
 
 export function showMenu() {
     mainPanel.hidden = false;
@@ -69,6 +70,7 @@ volume.value = settings.volume;
 sfxVolume.value = settings.sfxVolume;
 brightness.value = settings.brightness;
 mouseSensitivity.value = settings.mouseSensitivity;
+graphics.value = settings.graphics;
 
 document.querySelector("#settings").addEventListener("click", () => {
   mainPanel.hidden = true;
@@ -94,6 +96,10 @@ sfxVolume.addEventListener("input", () => {
 
 brightness.addEventListener("input", () => {
   settings.brightness = Number(brightness.value);
+});
+
+graphics.addEventListener("change", () => {
+  settings.graphics = graphics.value;
 });
 
 mouseSensitivity.addEventListener("input", () => {

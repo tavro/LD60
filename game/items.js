@@ -80,6 +80,9 @@ export function createItemSystem({
             depthWrite: false,
             side: THREE.DoubleSide,
             toneMapped: false,
+            polygonOffset: true,
+            polygonOffsetFactor: -2,
+            polygonOffsetUnits: -2,
         }),
     );
     ghost.name = "drop-ghost";
@@ -160,9 +163,6 @@ export function createItemSystem({
         setHighlight(item, false);
         target = null;
 
-        item.userData.onTaken?.();
-        item.userData.onTaken = null;
-
         // Measured unrotated, for the landing outline
         item.rotation.set(0, 0, 0);
         item.updateMatrixWorld(true);
@@ -174,6 +174,11 @@ export function createItemSystem({
         item.position.copy(hold.position);
         item.rotation.copy(hold.rotation);
         held = item;
+
+        // After it's in hand, so a replacement put where it was (like the ink cartridge's) lands on
+        // the floor rather than on top of it
+        item.userData.onTaken?.();
+        item.userData.onTaken = null;
     }
 
     // The free shelf spot nearest the point, for a held box
@@ -369,9 +374,10 @@ export function createItemSystem({
         const landed = landing();
         const { point, rotation = player.yaw } = landed;
         ghost.material.color.setHex(blockedRestock(landed) ? 0xff3333 : 0xffffff);
-        ghost.position.copy(point);
+        // A hair bigger and higher than the item, so it doesn't flicker against what it sits on
+        ghost.position.copy(point).setY(point.y + 0.01);
         ghost.rotation.set(0, rotation, 0);
-        ghost.scale.copy(heldSize);
+        ghost.scale.copy(heldSize).multiplyScalar(1.03);
     }
 
     // Swaying with the player's steps

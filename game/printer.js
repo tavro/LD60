@@ -12,6 +12,8 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
 
     const PAPER_SIZE = [0.8, 0.02, 1.13];
     const PAPER_COUNT = 10;
+    // Height difference between sheets lying on the floor, too small to see
+    const PAPER_LIFT = 0.003;
     // Papers lie around the printer, this far from it
     const PAPER_SPREAD = [1.5, 5];
 
@@ -129,8 +131,9 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
                 z = printerZ + Math.sin(angle) * distance;
             } while (x < -W + 1.5 || x > PARTITION_X - 1.5 || Math.abs(z) > D - 1.5 || collides(x, z));
 
+            // Each a hair higher than the last, so overlapping sheets don't flicker
             const paper = makePaper();
-            paper.position.set(x, 0, z);
+            paper.position.set(x, i * PAPER_LIFT, z);
             paper.rotation.y = randomBetween(0, Math.PI * 2);
             scene.add(paper);
             addItem(paper, "paper");
@@ -184,8 +187,10 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
         const landX = randomBetween(-0.4, 0.4);
         const landZ = SLOT_END_Z + randomBetween(0.4, 0.9);
         const spin = randomBetween(-0.8, 0.8);
+        // Slightly off the floor by a random hair, so it doesn't flicker against a page under it
+        const landY = randomBetween(1, 10) * PAPER_LIFT;
         await tween(0.7, (t) => {
-            page.position.set(landX * t, SLOT_Y * (1 - t * t), THREE.MathUtils.lerp(SLOT_END_Z, landZ, t));
+            page.position.set(landX * t, THREE.MathUtils.lerp(SLOT_Y, landY, t * t), THREE.MathUtils.lerp(SLOT_END_Z, landZ, t));
             page.rotation.set(Math.sin(t * Math.PI) * 0.4, spin * t, 0);
         });
 

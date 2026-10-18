@@ -7,6 +7,7 @@ import { createModelSpawner } from "./scene/models.js";
 import { createFurniture } from "./scene/furniture.js";
 import { createDoors } from "./scene/doors.js";
 import { createLighting } from "./scene/lighting.js";
+import { createGraphics } from "./game/graphics.js";
 import { createCollisionSystem } from "./game/collisions.js";
 import { createPlayer } from "./game/player.js";
 import { createControls } from "./game/controls.js";
@@ -31,8 +32,9 @@ import { showShiftPanel, setMenuOptions } from "./menu/menu.js";
 // Text on boxes, signs and menus is drawn in the pixel font, so it has to be loaded first
 await fontReady;
 
-const { scene, camera, renderer, composer } = createRendering();
+const { scene, camera, renderer, composer, bloom, heldPass } = createRendering();
 const lighting = createLighting(scene);
+const graphics = createGraphics({ scene, renderer, composer, bloom, lighting });
 const collisions = createCollisionSystem();
 createEnvironment(scene, collisions);
 const doors = createDoors(scene, collisions);
@@ -236,7 +238,6 @@ document.querySelector("#skip-tutorial").addEventListener("click", () => tutoria
 
 function applyUpgrade(id, level) {
     if (id === "belt") belt.setSpeed(1 + 0.5 * level);
-    else if (id === "coffee") customers.setPatienceBoost(1 + 0.25 * level);
     else if (id === "shelf") addExtraShelf(level - 1).then(customers.addShelf);
     else if (id === "alarm") customers.setAlarm(true);
 }
@@ -286,7 +287,10 @@ const timer = new THREE.Timer();
 
 function animate(time) {
     timer.update(time);
-    const dt = Math.min(timer.getDelta(), 0.1);
+    const frameTime = timer.getDelta();
+    const dt = Math.min(frameTime, 0.1);
+    // Only judged while playing, since the menus barely cost anything
+    graphics.update(controls.playing ? frameTime : 0);
 
     // Place the camera even while paused, so the world remains behind the menu.
     player.update(controls.playing ? dt : 0);
@@ -314,6 +318,8 @@ function animate(time) {
     music.update(player.state.x);
     applySettings(renderer, music);
     lighting.update(dt);
+    // Only drawn when there's something in hand
+    heldPass.enabled = items.heldKind() !== null;
     composer.render();
 }
 
