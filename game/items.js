@@ -1,6 +1,8 @@
 import * as THREE from "three";
 
-export function createItemSystem({ scene, camera, player, surfaces, slots, getExtraTargets, onDrop, onMopUse, onUse, onGive }) {
+export function createItemSystem({
+    scene, camera, player, surfaces, slots, physics, getExtraTargets, onDrop, onMopUse, onUse, onGive,
+}) {
     const REACH = 6;
     const DROP_DISTANCE = 1.5;
     // Items this close to the crosshair (in radians) count as aimed at, so they're easier to grab
@@ -114,6 +116,7 @@ export function createItemSystem({ scene, camera, player, surfaces, slots, getEx
     }
 
     function pickUp(item) {
+        physics.release(item);
         setHighlight(item, false);
         target = null;
 
@@ -156,12 +159,20 @@ export function createItemSystem({ scene, camera, player, surfaces, slots, getEx
     // falls straight down from just in front of what's being looked at (e.g. onto the board in front
     // of a shelf's back panel), or from a little in front of the player when looking at nothing in
     // reach
+    // How the held item gets put down: thrown when aimed at the floor or at nothing, put gently on
+    // top of loose items so they pile up, and placed exactly anywhere else
+    function dropStyle(hit) {
+        if (!hit || hit.object.userData.isFloor) return "throw";
+        const item = itemOf(hit.object);
+        return item && physics.isLoose(item) ? "pile" : "place";
+    }
+
     function landing() {
         const forward = new THREE.Vector3(-Math.sin(player.yaw), 0, -Math.cos(player.yaw));
         let above;
 
         const hit = lookHit();
-        const snapped = hit && snapToSlot(hit.point);
+        const snapped = hit && dropStyle(hit) === "place" && snapToSlot(hit.point);
         if (snapped) return snapped;
         if (hit) {
             // The face's own normal, since the interpolated one is tilted on bevelled edges
@@ -180,14 +191,30 @@ export function createItemSystem({ scene, camera, player, surfaces, slots, getEx
 
     function drop() {
         const aimed = lookHit();
-        const { point, rotation = player.yaw, slot } = landing();
+        const style = dropStyle(aimed);
+        // Worked out while still holding the item, since where it lands depends on what it is
+        const landed = style === "throw" ? null : landing();
         const item = held;
         held = null;
 
+        if (style === "throw") {
+            const direction = camera.getWorldDirection(new THREE.Vector3());
+            const from = camera.getWorldPosition(new THREE.Vector3()).addScaledVector(direction, 1);
+            from.y -= 0.5;
+            scene.add(item);
+            item.rotation.set(0, player.yaw, 0);
+            physics.throwItem(item, from, direction);
+            onDrop(item, aimed);
+            return;
+        }
+
+        const { point, rotation = player.yaw, slot } = landed;
         scene.add(item);
         item.position.copy(point);
         const twist = slot ? (Math.random() * 2 - 1) * SLOT_TWIST : 0;
         item.rotation.set(0, rotation + twist, 0);
+        // Anything ending up on the floor or a pile is loose, so it can topple and be knocked over
+        if (style === "pile" || point.y < 0.05) physics.addLoose(item);
 
         onDrop(item, aimed);
     }
@@ -236,6 +263,7 @@ export function createItemSystem({ scene, camera, player, surfaces, slots, getEx
 
     function takeForNPC(item, npc) {
         if (!items.includes(item) || item === held || item.userData.carrier) return false;
+        physics.release(item);
         setHighlight(item, false);
         if (target === item) target = null;
         item.userData.onTaken?.();
@@ -255,7 +283,7 @@ export function createItemSystem({ scene, camera, player, surfaces, slots, getEx
     }
 
     function updateGhost() {
-        ghost.visible = held !== null && held.userData.kind !== "mop";
+        ghost.visible = held !== null && held.userData.kind !== "mop" && dropStyle(lookHit()) !== "throw";
         if (!ghost.visible) return;
         const { point, rotation = player.yaw } = landing();
         ghost.position.copy(point);

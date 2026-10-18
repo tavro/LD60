@@ -2,7 +2,7 @@ import * as THREE from "three";
 import { PARTITION_X } from "../scene/layout.js";
 
 // Messes on the shop floor: drinks customers spill, ink footprints the player tracks out of the
-// puddle by the printer, and boxes lying on the floor. Each one makes customers lose patience
+// puddle by the printer, and loose boxes lying around. Each one makes customers lose patience
 // faster. The mop cleans spills and footprints; boxes have to be put back
 const FOOTPRINT_STEPS = 14;
 const STRIDE = 1.3;
@@ -12,7 +12,7 @@ const CLEAN_BELOW = 0.3;
 // Footprints count as one mess per this many
 const FOOTPRINTS_PER_MESS = 4;
 
-export function createMesses({ scene, items, tween }) {
+export function createMesses({ scene, items, physics, tween }) {
     const spills = [];
     const footprints = [];
 
@@ -87,7 +87,7 @@ export function createMesses({ scene, items, tween }) {
 
     function count() {
         const floorBoxes = items.list().filter((item) =>
-            item.userData.kind === "box" && item.parent === scene && item.position.y < 0.05 && inShop(item),
+            item.userData.kind === "box" && physics.isLoose(item) && inShop(item),
         ).length;
         const shopFootprints = footprints.filter(inShop).length;
         return spills.filter(inShop).length + Math.ceil(shopFootprints / FOOTPRINTS_PER_MESS) + floorBoxes;

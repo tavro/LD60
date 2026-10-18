@@ -16,6 +16,7 @@ import { applySettings } from "./game/settings.js";
 import { createRegister } from "./game/register.js";
 import { createShift } from "./game/shift.js";
 import { createMesses } from "./game/messes.js";
+import { createPhysics } from "./game/physics.js";
 import { createTutorial } from "./game/tutorial.js";
 import { createBelt } from "./game/belt.js";
 import { createCustomerController } from "./npc/controller.js";
@@ -26,6 +27,7 @@ const { scene, camera, renderer } = createRendering();
 const collisions = createCollisionSystem();
 createEnvironment(scene, collisions);
 const doors = createDoors(scene, collisions);
+const physics = createPhysics({ footprints: () => collisions.colliders.concat(collisions.barriers) });
 
 const models = createModelSpawner(scene, collisions);
 const player = createPlayer(camera, collisions);
@@ -43,6 +45,7 @@ const items = createItemSystem({
     player: player.state,
     surfaces: collisions.surfaces,
     slots: shelfSlots,
+    physics,
     getExtraTargets: () => printer?.puddle.visible ? [printer.puddle] : [],
     onDrop: (item, hit) => {
         printer.handleDrop(item, hit);
@@ -63,7 +66,7 @@ printer = createPrinterSystem({
     printerLoaded,
     retag: stock.retag,
 });
-const messes = createMesses({ scene, items, tween: animations.tween });
+const messes = createMesses({ scene, items, physics, tween: animations.tween });
 
 // Place loose items after the furniture and initial stock have loaded.
 models.ready().then(() => printer.initialize());
@@ -76,7 +79,9 @@ customers = createCustomerController({
     scene,
     camera,
     collides: collisions.collides,
+    bump: collisions.bump,
     items,
+    physics,
     shift,
     belt,
     messes,
@@ -84,6 +89,12 @@ customers = createCustomerController({
     shelvesLoaded: shopShelvesLoaded,
     counterLoaded,
 });
+// Customers and the player bump into each other
+collisions.setBodies(() => [
+    { x: player.state.x, z: player.state.z, radius: player.radius, player: true },
+    ...customers.bodies(),
+]);
+
 const controls = createControls({
     renderer,
     player,
@@ -207,6 +218,7 @@ function animate(time) {
         npcSpeech.update(dt);
         items.update(dt);
         animations.update(dt);
+        physics.update(dt);
         printer.update(dt);
     }
     music.update(player.state.x);

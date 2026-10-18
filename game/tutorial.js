@@ -55,7 +55,9 @@ export function createTutorial({
             done: () => Math.hypot(player.x - start.x, player.z - start.z) > 3,
         },
         {
-            text: "New stock is kept in the storage room on the left. Walk up to its door and it opens by itself.",
+            text: "New stock is kept in the storage room, behind the wall at the far end of the shop, opposite " +
+                "the counter. Seen from the counter, its door is towards the right of that wall; walk up to it " +
+                "and it opens by itself.",
             done: () => player.x < PARTITION_X,
         },
         {
@@ -74,7 +76,7 @@ export function createTutorial({
         },
         {
             text: "Here comes a customer. They put their box on the belt, which carries it to your left. " +
-                "When it reaches the end, click it to scan it.",
+                "When it reaches the red SCAN zone at the end, click it to scan it.",
             enter: () => customers.spawnCustomer("regular", { ...patient, wants: [STOCK[0]] }),
             done: () => customers.stats.sold > since.sold,
         },

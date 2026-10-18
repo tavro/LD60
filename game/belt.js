@@ -14,6 +14,10 @@ export const BELT_START = -CHANNEL_LENGTH / 2 + 0.5;
 const BELT_END = CHANNEL_LENGTH / 2 - 0.5;
 const BASE_SPEED = 0.6;
 const GAP = 1.2;
+// The scanner is a red zone over the last box length of the belt, which pulses while a box is in it
+// and flashes when something is clicked before getting there. A placeholder for a scanner model
+const SCAN_OPACITY = 0.35;
+const FLASH_TIME = 1;
 
 export function createBelt(scene, counterLoaded) {
     // Items on the belt, the one furthest along first
@@ -40,6 +44,30 @@ export function createBelt(scene, counterLoaded) {
         new THREE.MeshStandardMaterial({ map: texture, roughness: 0.9 }),
     );
 
+    const scanCanvas = document.createElement("canvas");
+    scanCanvas.width = 128;
+    scanCanvas.height = 192;
+    const scanCtx = scanCanvas.getContext("2d");
+    scanCtx.fillStyle = "#ff2a2a";
+    scanCtx.fillRect(0, 0, scanCanvas.width, scanCanvas.height);
+    scanCtx.fillStyle = "#fff";
+    scanCtx.fillRect(0, scanCanvas.height / 2 - 3, scanCanvas.width, 6);
+    scanCtx.font = "bold 40px sans-serif";
+    scanCtx.textAlign = "center";
+    scanCtx.textBaseline = "middle";
+    scanCtx.fillText("SCAN", scanCanvas.width / 2, 40);
+    const scanTexture = new THREE.CanvasTexture(scanCanvas);
+    scanTexture.colorSpace = THREE.SRGBColorSpace;
+    const scanMaterial = new THREE.MeshBasicMaterial({
+        map: scanTexture,
+        transparent: true,
+        opacity: SCAN_OPACITY,
+        depthWrite: false,
+    });
+    const scanner = new THREE.Mesh(new THREE.PlaneGeometry(1, CHANNEL_WIDTH), scanMaterial);
+    let flash = 0;
+    let time = 0;
+
     counterLoaded.then((desk) => {
         counter = desk;
         // Flush with the counter top
@@ -47,6 +75,12 @@ export function createBelt(scene, counterLoaded) {
         belt.position.set(0, top - CHANNEL_DEPTH / 2, BELT_Z);
         // Part of the desk, so it blocks items and they can be put down on it
         desk.add(belt);
+
+        // Lying on the belt over where boxes stop, with the text the right way up for the cashier
+        // on the local -z side
+        scanner.rotation.set(-Math.PI / 2, 0, Math.PI);
+        scanner.position.set(BELT_END, top + 0.01, BELT_Z);
+        desk.add(scanner);
     });
 
     function positionAt(x) {
@@ -90,6 +124,8 @@ export function createBelt(scene, counterLoaded) {
         if (!counter) return;
         texture.offset.x -= speed * dt * texture.repeat.x / CHANNEL_LENGTH;
 
+        updateScanner(dt);
+
         // Items the player picked back up are off the belt
         for (const item of onBelt.filter((item) => item.parent !== scene)) remove(item);
 
@@ -108,9 +144,32 @@ export function createBelt(scene, counterLoaded) {
         return onBelt.includes(item) && item.userData.beltX >= BELT_END - 0.05;
     }
 
+    // Takes an item off the belt and sets it down on the counter top on the cashier's left, out of
+    // the way, e.g. when the customer who put it there walks out
+    function putAside(item) {
+        remove(item);
+        const x = 2.4 + Math.random() * 1.2;
+        const z = -1.6 + Math.random() * 1.2;
+        item.position.copy(counter.localToWorld(new THREE.Vector3(x, top, z)));
+        item.rotation.y = counter.rotation.y + Math.PI + (Math.random() - 0.5) * 0.4;
+    }
+
     function setSpeed(multiplier) {
         speed = BASE_SPEED * multiplier;
     }
 
-    return { hasRoom, place, remove, handleDrop, atEnd, setSpeed, update };
+    function flashScanner() {
+        flash = FLASH_TIME;
+    }
+
+    function updateScanner(dt) {
+        time += dt;
+        flash = Math.max(flash - dt, 0);
+        const ready = onBelt.some((item) => item.userData.forSale && atEnd(item));
+        if (flash > 0) scanMaterial.opacity = Math.sin(flash * Math.PI * 6) > 0 ? 0.95 : 0.15;
+        else if (ready) scanMaterial.opacity = SCAN_OPACITY + 0.3 * (0.5 + 0.5 * Math.sin(time * 8));
+        else scanMaterial.opacity = SCAN_OPACITY;
+    }
+
+    return { hasRoom, place, remove, putAside, handleDrop, atEnd, setSpeed, flashScanner, update };
 }

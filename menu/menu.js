@@ -10,6 +10,7 @@ const settingsPanel = document.querySelector("#settings-panel");
 const shiftPanel = document.querySelector("#shift-panel");
 const volume = document.querySelector("#volume");
 const brightness = document.querySelector("#brightness");
+const mouseSensitivity = document.querySelector("#mouse-sensitivity");
 
 export function showMenu() {
     mainPanel.hidden = false;
@@ -62,6 +63,7 @@ export function hideMenu() {
 
 volume.value = settings.volume;
 brightness.value = settings.brightness;
+mouseSensitivity.value = settings.mouseSensitivity;
 
 document.querySelector("#settings").addEventListener("click", () => {
   mainPanel.hidden = true;
@@ -80,4 +82,8 @@ volume.addEventListener("input", () => {
 
 brightness.addEventListener("input", () => {
   settings.brightness = Number(brightness.value);
+});
+
+mouseSensitivity.addEventListener("input", () => {
+  settings.mouseSensitivity = Number(mouseSensitivity.value);
 });

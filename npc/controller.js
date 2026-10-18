@@ -61,6 +61,14 @@ const MESSY = 3;
 const OVERCHARGE_PENALTY = 15;
 const ACCUSE_PENALTY = 10;
 const PRINT_PRICE = 10;
+// Customers keep this far apart from each other and the player, and step aside at these angles (in
+// radians) when someone's in the way. Two customers stuck on each other for SQUEEZE_AFTER seconds
+// squeeze past for SQUEEZE_TIME, so a jam never lasts; the player has to step aside themselves
+const BODY_RADIUS = 0.8;
+const SIDESTEPS = [0, 0.6, -0.6, 1.2, -1.2];
+const SQUEEZE_AFTER = 1.5;
+const SQUEEZE_TIME = 1;
+const EXCUSE_EVERY = 4;
 const CATCH_REWARD = 3;
 const SHIRTS = [0x447abb, 0xbb4444, 0x44aa66, 0xaa66bb, 0xd08a2a, 0x555555];
 
@@ -117,7 +125,7 @@ function listOf(wants) {
 }
 
 export function createCustomerController({
-    scene, camera, collides, items, shift, belt, messes, speech, shelvesLoaded, counterLoaded,
+    scene, camera, collides, bump, items, physics, shift, belt, messes, speech, shelvesLoaded, counterLoaded,
 }) {
     const { say } = speech;
     const customers = [];
@@ -257,6 +265,9 @@ export function createCustomerController({
             patience: 0,
             recheck: 0,
             hurried: false,
+            blocked: 0,
+            squeezing: 0,
+            excuseIn: 0,
         });
     }
 
@@ -282,18 +293,19 @@ export function createCustomerController({
         go(customer, target, center);
     }
 
-    // Sometimes a box gets knocked off the shelf onto the floor in front of it
+    // Sometimes a box gets knocked off the shelf and tumbles onto the floor in front of it
     function maybeKnock(customer, shelf) {
         if (Math.random() >= customer.type.knock) return;
         const box = items.findShelfItem(shelf, null);
         if (!box) return;
-        const { target, center } = shelfApproach(shelf);
-        const position = center.clone().lerp(target, 0.5);
-        position.x += randomBetween(-0.5, 0.5);
-        position.z += randomBetween(-0.5, 0.5);
-        position.y = 0;
-        box.position.copy(position);
-        box.rotation.set(0, randomBetween(0, Math.PI * 2), 0);
+        // Just outside the shelf's front, so it doesn't start inside the shelf's collision box
+        const front = new THREE.Vector3(0, 0, 1).applyQuaternion(shelf.quaternion);
+        const depth = shelf.userData.size.z;
+        box.position.addScaledVector(front, depth / 2 + 0.6 - front.dot(box.position.clone().sub(shelf.position)));
+        physics.addLoose(box, {
+            velocity: front.clone().multiplyScalar(randomBetween(2, 4)).setY(2),
+            spin: new THREE.Vector3(randomBetween(-4, 4), randomBetween(-4, 4), randomBetween(-4, 4)),
+        });
         say(customer.npc, "Oops!");
     }
 
@@ -341,10 +353,12 @@ export function createCustomerController({
         return customer.placed === customer.wants.length;
     }
 
-    // Sends everyone in line to where they should stand, if that changed
+    // Sends everyone in line to where they should stand, if that changed: the first one by the
+    // cashier once their things are on the belt, and the rest in line from the start of the belt
     function arrangeQueue() {
+        const paying = queue.length > 0 && allPlaced(queue[0]);
         queue.forEach((customer, index) => {
-            const { target, facing } = index === 0 && allPlaced(customer) ? paySpot() : lineSpot(index);
+            const { target, facing } = index === 0 && paying ? paySpot() : lineSpot(index + (paying ? 0 : 1));
             if (customer.spot?.distanceTo(target) < 0.01) return;
             customer.spot = target;
             go(customer, target, facing);
@@ -374,13 +388,17 @@ export function createCustomerController({
     function dropCarried(customer) {
         customer.items.forEach((item, i) => {
             if (item.userData.beltX !== undefined) {
-                // Already on the belt, where it keeps riding for the player to put back
+                // Already on the belt: set aside on the counter for the player to put back, so it
+                // doesn't block the scanner
                 delete item.userData.forSale;
+                belt.putAside(item);
                 return;
             }
+            // Dropped from their arms, falling onto the floor
             const { x, z } = customer.npc.position;
-            items.placeFromNPC(item, new THREE.Vector3(x + i * 0.4, 0, z + i * 0.4));
+            items.placeFromNPC(item, new THREE.Vector3(x + i * 0.4, 1.5 + i, z + i * 0.4));
             item.scale.setScalar(1);
+            physics.addLoose(item);
         });
         customer.items = [];
     }
@@ -453,7 +471,10 @@ export function createCustomerController({
         while (item && !item.userData.forSale) item = item.parent;
         if (!item) return false;
         // Theirs to buy, but not at the scanner yet
-        if (!belt.atEnd(item)) return true;
+        if (!belt.atEnd(item)) {
+            belt.flashScanner();
+            return true;
+        }
 
         const customer = item.userData.forSale;
         const { price } = STOCK.find((stock) => stock.label === item.userData.label);
@@ -566,17 +587,7 @@ export function createCustomerController({
             leave(customer);
         }
 
-        let dx = 0;
-        let dz = 0;
-        if (customer.route.length) {
-            const next = customer.route[0];
-            const remaining = Math.hypot(next.x - npc.position.x, next.z - npc.position.z);
-            const step = Math.min(MOVE_SPEED * customer.type.speed * dt, remaining);
-            dx = remaining ? (next.x - npc.position.x) / remaining * step : 0;
-            dz = remaining ? (next.z - npc.position.z) / remaining * step : 0;
-            if (remaining > 0.0001) npc.rotation.y = Math.atan2(dx, dz);
-            if (step >= remaining) customer.route.shift();
-        }
+        const { dx, dz } = customer.route.length ? stepAlongRoute(customer, dt) : { dx: 0, dz: 0 };
         const startX = npc.position.x;
         const startZ = npc.position.z;
 
@@ -593,6 +604,49 @@ export function createCustomerController({
             }
             arrive(customer);
         }
+    }
+
+    function bodyRadius(customer) {
+        return BODY_RADIUS * (customer.type.scale ?? 1);
+    }
+
+    // Towards the next point on the route, or around whoever's in the way
+    function stepAlongRoute(customer, dt) {
+        const { npc } = customer;
+        const next = customer.route[0];
+        const remaining = Math.hypot(next.x - npc.position.x, next.z - npc.position.z);
+        const step = Math.min(MOVE_SPEED * customer.type.speed * dt, remaining);
+        const towardX = remaining ? (next.x - npc.position.x) / remaining * step : 0;
+        const towardZ = remaining ? (next.z - npc.position.z) / remaining * step : 0;
+        customer.squeezing = Math.max(customer.squeezing - dt, 0);
+        customer.excuseIn -= dt;
+
+        const ignore = (body) => body.customer === customer || (customer.squeezing > 0 && !body.player);
+        let blocker = null;
+        for (const angle of SIDESTEPS) {
+            const cos = Math.cos(angle);
+            const sin = Math.sin(angle);
+            const dx = towardX * cos - towardZ * sin;
+            const dz = towardX * sin + towardZ * cos;
+            const to = { x: npc.position.x + dx, z: npc.position.z + dz };
+            blocker = bump(npc.position, to, bodyRadius(customer), ignore);
+            if (blocker) continue;
+
+            customer.blocked = 0;
+            if (remaining > 0.0001) npc.rotation.y = Math.atan2(dx, dz);
+            // Only a straight step can reach the point; a step aside leaves it for later
+            if (angle === 0 && step >= remaining) customer.route.shift();
+            return { dx, dz };
+        }
+
+        customer.blocked += dt;
+        if (blocker.player && customer.blocked > 0.5 && customer.excuseIn <= 0) {
+            say(npc, "Excuse me!");
+            customer.excuseIn = EXCUSE_EVERY;
+        } else if (!blocker.player && customer.blocked > SQUEEZE_AFTER) {
+            customer.squeezing = SQUEEZE_TIME;
+        }
+        return { dx: 0, dz: 0 };
     }
 
     function update(dt) {
@@ -629,6 +683,12 @@ export function createCustomerController({
         setPatienceBoost: (boost) => { patienceBoost = boost; },
         setAlarm: (on) => { alarm = on; },
         count: () => customers.length,
+        bodies: () => customers.map((customer) => ({
+            x: customer.npc.position.x,
+            z: customer.npc.position.z,
+            radius: bodyRadius(customer),
+            customer,
+        })),
         positions: () => customers.map((customer) => customer.npc.position),
     };
 }
