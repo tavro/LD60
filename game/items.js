@@ -1,7 +1,7 @@
 import * as THREE from "three";
 
 export function createItemSystem({
-    scene, camera, player, surfaces, slots, physics, getExtraTargets, onDrop, onMopUse, onUse, onGive,
+    scene, camera, player, surfaces, slots, physics, collides, getExtraTargets, onDrop, onMopUse, onUse, onGive,
 }) {
     const REACH = 6;
     const DROP_DISTANCE = 1.5;
@@ -11,6 +11,9 @@ export function createItemSystem({
     const SNAP_DISTANCE = 1.5;
     // Up to this much random turn (in radians) on boxes put in a shelf, so rows don't look too neat
     const SLOT_TWIST = 0.2;
+    // Thrown items start this far in front of the player, and at least this far from what's in front
+    const THROW_START = 1;
+    const THROW_CLEARANCE = 0.8;
     // Where held items sit relative to the camera. The mop is held head down, leaning away
     const HOLD = {
         default: { position: new THREE.Vector3(1, -1.2, -2.5), rotation: new THREE.Euler() },
@@ -159,6 +162,17 @@ export function createItemSystem({
     // falls straight down from just in front of what's being looked at (e.g. onto the board in front
     // of a shelf's back panel), or from a little in front of the player when looking at nothing in
     // reach
+    // Moves a point back towards the player until the held item there wouldn't overlap a wall, door or
+    // furniture. A loose item that starts out overlapping one gets pushed out, maybe out the far side
+    function clearOfWalls(point) {
+        const radius = Math.max(heldSize.x, heldSize.z) / 2;
+        for (let i = 0; i < 20 && collides(point.x, point.z, radius, { player: true }); i++) {
+            point.x += (player.x - point.x) * 0.15;
+            point.z += (player.z - point.z) * 0.15;
+        }
+        return point;
+    }
+
     // How the held item gets put down: thrown when aimed at the floor or at nothing, put gently on
     // top of loose items so they pile up, and placed exactly anywhere else
     function dropStyle(hit) {
@@ -198,8 +212,13 @@ export function createItemSystem({
         held = null;
 
         if (style === "throw") {
+            // From a little in front of the player, but never inside a wall or door they're up
+            // against, which would push it out the other side
             const direction = camera.getWorldDirection(new THREE.Vector3());
-            const from = camera.getWorldPosition(new THREE.Vector3()).addScaledVector(direction, 1);
+            const eye = camera.getWorldPosition(new THREE.Vector3());
+            const blocker = firstHit(eye, direction, THROW_START + THROW_CLEARANCE);
+            const distance = blocker ? Math.max(blocker.distance - THROW_CLEARANCE, 0) : THROW_START;
+            const from = clearOfWalls(eye.addScaledVector(direction, distance));
             from.y -= 0.5;
             scene.add(item);
             item.rotation.set(0, player.yaw, 0);
@@ -209,12 +228,14 @@ export function createItemSystem({
         }
 
         const { point, rotation = player.yaw, slot } = landed;
+        const onFloor = point.y < 0.05;
+        if (onFloor) clearOfWalls(point);
         scene.add(item);
         item.position.copy(point);
         const twist = slot ? (Math.random() * 2 - 1) * SLOT_TWIST : 0;
         item.rotation.set(0, rotation + twist, 0);
         // Anything ending up on the floor or a pile is loose, so it can topple and be knocked over
-        if (style === "pile" || point.y < 0.05) physics.addLoose(item);
+        if (style === "pile" || onFloor) physics.addLoose(item);
 
         onDrop(item, aimed);
     }
