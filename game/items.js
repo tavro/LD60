@@ -3,6 +3,7 @@ import { playSfx } from "./sfx.js";
 
 export function createItemSystem({
     scene, camera, player, surfaces, slots, physics, collides, getExtraTargets, onDrop, onMopUse, onUse, onGive,
+    onWorldUse = () => false,
 }) {
     const REACH = 6;
     const DROP_DISTANCE = 1.5;
@@ -252,6 +253,8 @@ export function createItemSystem({
     }
 
     function interact() {
+        // Fixed controls, such as the shift button, work even while carrying the mop or a product.
+        if (onWorldUse(lookHit())) return;
         if (held?.userData.kind === "mop") {
             const hit = lookHit();
             if (onMopUse(held, hit)) return;

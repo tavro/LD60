@@ -112,6 +112,8 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
     setPuddleSize(0);
 
     function spawnCartridge() {
+        // Supplies can spawn before the first render; apply floor transforms before raycasting.
+        scene.updateMatrixWorld(true);
         const cartridge = makeCartridge();
         cartridge.position.copy(firstHit(CARTRIDGE_SPOT, DOWN, Infinity).point);
         scene.add(cartridge);

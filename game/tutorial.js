@@ -61,11 +61,12 @@ export function createTutorial({
             done: () => player.x < PARTITION_X,
         },
         {
-            text: "Look at a box on a storage shelf and click to pick it up.",
+            text: "Storage starts empty on day one; deliveries arrive after shifts. For practice, return " +
+                "to the shop and click a product on a shelf to pick it up.",
             done: () => items.heldKind() === "box",
         },
         {
-            text: "Carry it into the shop and find the shelf whose sign matches the box's sticker. " +
+            text: "Find the shop shelf whose sign matches the box's sticker. " +
                 "Look at the shelf and click to put the box in.",
             enter: () => { dropped = null; },
             done: droppedOnMatchingShelf,

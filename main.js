@@ -9,6 +9,8 @@ import { createPlayer } from "./game/player.js";
 import { createControls } from "./game/controls.js";
 import { createItemSystem } from "./game/items.js";
 import { createStockSystem } from "./game/stock.js";
+import { createDeliverySystem } from "./game/delivery.js";
+import { createShiftButton, shiftStartProblems } from "./game/shift-button.js";
 import { createAnimationSystem } from "./game/animation.js";
 import { createPrinterSystem } from "./game/printer.js";
 import { createMusicSystem } from "./game/music.js";
@@ -39,6 +41,8 @@ const shelfSlots = [];
 // Callbacks connect item interactions to the printer and customers without module import cycles.
 let printer;
 let customers;
+let delivery;
+let shiftButton;
 const items = createItemSystem({
     scene,
     camera,
@@ -54,14 +58,17 @@ const items = createItemSystem({
         tutorial.onDrop(item);
     },
     onMopUse: (mop, hit) => printer.tryScrub(mop, hit) || messes.tryScrub(mop, hit),
-    onUse: (hit) => customers.use(hit),
+    onWorldUse: (hit) => shiftButton.use(hit),
+    onUse: (hit) => delivery.use(hit) || customers.use(hit),
     onGive: (item) => customers.give(item),
 });
 const stock = createStockSystem({ spawn: models.spawn, addItem: items.addItem, slots: shelfSlots });
-const { printerLoaded, shopShelvesLoaded, counterLoaded, addExtraShelf, refillStorage } = createFurniture({
+const { printerLoaded, shopShelvesLoaded, counterLoaded, addExtraShelf, stockCapacity } = createFurniture({
     spawn: models.spawn,
     ...stock,
-    isTaken: (position) => items.list().some((item) => item.position.distanceTo(position) < 0.5),
+});
+delivery = createDeliverySystem({
+    scene, items, physics, placeBox: stock.placeBox, collides: collisions.collides, stockCapacity,
 });
 printer = createPrinterSystem({
     scene,
@@ -73,8 +80,10 @@ printer = createPrinterSystem({
 });
 const messes = createMesses({ scene, items, physics, tween: animations.tween });
 
-// Place loose items after the furniture and initial stock have loaded.
-models.ready().then(() => printer.initialize());
+// Scatter paper after the furniture loads. The mop and cartridge already exist independently.
+models.ready().then(() => printer.initialize()).catch((error) => {
+    console.warn("Could not scatter printer paper:", error);
+});
 
 const npcSpeech = createNPCSpeech();
 const register = createRegister(scene, counterLoaded);
@@ -106,12 +115,59 @@ const controls = createControls({
     player,
     interact: items.interact,
     onPlay: () => {
-        if (tutorial.active || shift.day !== 0) return;
-        shift.start(1);
-        setMenuOptions({ play: "▶ Back to work", tutorial: false, skip: false });
+        if (tutorial.active || shift.day !== 0 || nextDay !== null) return;
+        beginShift(1);
     },
     onPause: customers.reset,
 });
+
+let nextDay = null;
+let preparationError = "";
+let startWarning = "";
+let warningTime = 0;
+const preparationCard = document.createElement("div");
+preparationCard.id = "preparation-card";
+preparationCard.hidden = true;
+document.body.append(preparationCard);
+
+function prepareShift(day) {
+    if (nextDay !== null) return;
+    nextDay = day;
+    preparationError = "";
+    startWarning = "";
+    shiftButton.setActive(true);
+    // The carton is built from geometry, with no asset download or printer initialization to await.
+    try {
+        delivery.arrive();
+    } catch (error) {
+        preparationError = "Delivery could not be created. Reload the game to try again.";
+        console.warn("Delivery arrival failed:", error);
+    }
+    register.show({ day: 0, time: "Restocking" });
+    setMenuOptions({ play: "▶ Back to preparation", tutorial: false, skip: false });
+    preparationCard.hidden = false;
+}
+
+function startPreparedShift() {
+    if (!controls.playing || nextDay === null) return;
+    const problems = preparationError ? [preparationError] : shiftStartProblems({ delivery, messes, printer });
+    if (problems.length) {
+        startWarning = problems.join("\n");
+        warningTime = 8;
+        return;
+    }
+    beginShift(nextDay);
+}
+
+function beginShift(day) {
+    shift.start(day);
+    nextDay = null;
+    shiftButton.setActive(false);
+    preparationCard.hidden = true;
+    setMenuOptions({ play: "▶ Back to work", tutorial: false, skip: false });
+}
+
+shiftButton = createShiftButton({ counterLoaded, onPress: startPreparedShift });
 
 // Tutorial, from the menu before the first shift
 
@@ -130,7 +186,7 @@ const tutorial = createTutorial({
         customers.clear();
         setMenuOptions({ play: "▶ Back to work", tutorial: false, skip: false });
         if (skipped) {
-            shift.start(1);
+            beginShift(1);
             controls.resume();
             return;
         }
@@ -145,7 +201,7 @@ const tutorial = createTutorial({
             ],
             button: "▶ Start day 1",
             onContinue: () => {
-                shift.start(1);
+                beginShift(1);
                 controls.resume();
             },
         });
@@ -169,15 +225,16 @@ function applyUpgrade(id, level) {
     else if (id === "alarm") customers.setAlarm(true);
 }
 
-// The storage shelves get a delivery overnight, topping them back up
+// Show the results first; the player collects and unpacks the next delivery during preparation.
 function endShift(result) {
+    shiftButton.setActive(true);
     controls.stop();
     customers.clear();
-    showShiftResult({ ...result, delivered: refillStorage() });
+    showShiftResult(result);
 }
 
 function showShiftResult(result) {
-    const { day, success, takings, target, walkouts, maxWalkouts, delivered } = result;
+    const { day, success, takings, target, walkouts, maxWalkouts } = result;
     const failedBy = walkouts >= maxWalkouts ? "Too many walkouts." : `Missed the $${target} target.`;
     const upgrades = success
         ? shift.upgradeOffers().map((upgrade) => ({
@@ -198,12 +255,12 @@ function showShiftResult(result) {
             `Takings: $${takings} of $${target}`,
             `Walkouts: ${walkouts} of ${maxWalkouts}`,
             success ? `Bank: $${shift.bank}` : failedBy,
-            `Overnight delivery: ${delivered} ${delivered === 1 ? "box" : "boxes"} for the storage room`,
+            "Collect the next delivery at the front door during preparation.",
         ],
         upgrades,
-        button: success ? `▶ Start day ${day + 1}` : "▶ Try again",
+        button: success ? `▶ Prepare day ${day + 1}` : "▶ Prepare to try again",
         onContinue: () => {
-            shift.start(success ? day + 1 : day);
+            prepareShift(success ? day + 1 : day);
             controls.resume();
         },
     });
@@ -229,7 +286,15 @@ function animate(time) {
         animations.update(dt);
         physics.update(dt);
         printer.update(dt);
+        if (nextDay !== null) {
+            warningTime = Math.max(0, warningTime - dt);
+            const warning = warningTime > 0 ? `\n${startWarning}` : "";
+            const status = preparationError || delivery.message;
+            const text = `PREPARING DAY ${nextDay}\n${status}${warning}\nClean the shop, then click the glowing red button at the counter to start.`;
+            if (preparationCard.textContent !== text) preparationCard.textContent = text;
+        }
     }
+    shiftButton.update(dt);
     music.update(player.state.x);
     applySettings(renderer, music);
     renderer.render(scene, camera);

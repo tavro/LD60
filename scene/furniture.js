@@ -19,14 +19,13 @@ function shuffled(list) {
     return copy;
 }
 
-// `isTaken` tells whether a box is already standing at a position, for refilling the storage shelves
-export function createFurniture({ spawn, shelfSlots, placeBox, spawnShelf, isTaken }) {
+export function createFurniture({ spawn, shelfSlots, placeBox, spawnShelf }) {
     const PRINTER = { x: -12, z: -INNER + 1.2 };
     const printerLoaded = spawn("printer", PRINTER);
 
     // Restocking shelf, L-shaped in the bottom left corner, with each shelf holding its own item,
-    // numbered along the L starting from the left wall. They start full and are topped up by a
-    // delivery before each shift (`refillStorage`), not as boxes are taken
+    // numbered along the L starting from the left wall. They start empty; deliveries must be
+    // unpacked and shelved by the player after shifts.
     const RESTOCK_SHELVES = [
         { x: -W + WALL_THICKNESS / 2 + 1, z: 9, rotation: FACE_RIGHT },
         ...[-16, -12, -8].map((x) => ({ x, z: INNER - 1, rotation: FACE_UP })),
@@ -35,19 +34,15 @@ export function createFurniture({ spawn, shelfSlots, placeBox, spawnShelf, isTak
         spawnShelf(shelf, STOCK[i]);
         return shelfSlots(shelf).map((slot) => ({ ...slot, stock: STOCK[i] }));
     });
-    for (const slot of storageSlots) placeBox(slot);
-
-    // Fills every empty storage spot; returns how many boxes that took
-    function refillStorage() {
-        const empty = storageSlots.filter((slot) => !isTaken(slot.position));
-        for (const slot of empty) placeBox(slot);
-        return empty.length;
-    }
+    const capacity = Object.fromEntries(STOCK.map(({ label }) => [label,
+        storageSlots.filter((slot) => slot.stock.label === label).length,
+    ]));
 
     // Shop shelves, where customers take what they buy. Each starts with a few boxes of its item
     const shopShelves = [];
 
     function spawnShopShelf(options, stock) {
+        capacity[stock.label] += shelfSlots(options).length;
         const count = START_STOCK[0] + Math.floor(Math.random() * (START_STOCK[1] - START_STOCK[0] + 1));
         for (const slot of shuffled(shelfSlots(options)).slice(0, count)) {
             const twist = (Math.random() * 2 - 1) * SLOT_TWIST;
@@ -93,5 +88,8 @@ export function createFurniture({ spawn, shelfSlots, placeBox, spawnShelf, isTak
         ],
     });
 
-    return { printerLoaded, shopShelvesLoaded: Promise.all(shopShelves), counterLoaded, addExtraShelf, refillStorage };
+    return {
+        printerLoaded, shopShelvesLoaded: Promise.all(shopShelves), counterLoaded, addExtraShelf,
+        stockCapacity: (label) => capacity[label] ?? 0,
+    };
 }

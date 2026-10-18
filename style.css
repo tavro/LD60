@@ -30,7 +30,8 @@ body {
 }
 
 /* Tutorial instructions, styled like the menu card */
-#tutorial-card {
+#tutorial-card,
+#preparation-card {
   position: fixed;
   bottom: 24px;
   left: 50%;
@@ -44,9 +45,11 @@ body {
   box-shadow: 6px 6px 0 rgba(0, 0, 0, 0.35);
   pointer-events: none;
   z-index: 1;
+  white-space: pre-line;
 }
 
-#tutorial-card[hidden] {
+#tutorial-card[hidden],
+#preparation-card[hidden] {
   display: none;
 }
 
