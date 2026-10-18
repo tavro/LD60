@@ -1,8 +1,10 @@
 import * as THREE from "three";
 
-// Memes from these subreddits, through meme-api.com. Both it and i.redd.it send CORS headers,
-// which WebGL needs to use the images
-const MEME_SUBREDDITS = ["ItalianBrainrot", "shitposting"];
+// Memes from these subreddits, through meme-api.com: ones that are mostly characters with little
+// text, so they read on a small printed page (r/Bossfight puts its jokes in the post titles, not
+// the pictures). Both meme-api.com and i.redd.it send CORS headers, which WebGL needs to use the
+// images
+const MEME_SUBREDDITS = ["ItalianBrainrot", "Bossfight"];
 const MEME_BATCH = 20;
 let memeUrls = [];
 
@@ -20,7 +22,7 @@ async function nextMemeUrl() {
     return url;
 }
 
-// A random meme fitted onto a white page, or a doodle if that doesn't load in time
+// A random meme stretched over a whole page, or a doodle if that doesn't load in time
 export function randomImage() {
     const download = nextMemeUrl()
         .then((url) => new THREE.ImageLoader().loadAsync(url))
@@ -35,22 +37,12 @@ export function randomImage() {
         });
 }
 
+// Stretched to cover the whole page, edge to edge
 function onPage(image) {
     const canvas = document.createElement("canvas");
     canvas.width = 400;
     canvas.height = 566;
-    const ctx = canvas.getContext("2d");
-    ctx.fillStyle = "#f4f4ef";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    const margin = 16;
-    const scale = Math.min(
-        (canvas.width - margin * 2) / image.width,
-        (canvas.height - margin * 2) / image.height,
-    );
-    const width = image.width * scale;
-    const height = image.height * scale;
-    ctx.drawImage(image, (canvas.width - width) / 2, (canvas.height - height) / 2, width, height);
+    canvas.getContext("2d").drawImage(image, 0, 0, canvas.width, canvas.height);
     return new THREE.CanvasTexture(canvas);
 }
 

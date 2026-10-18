@@ -84,6 +84,8 @@ export function createDoors(scene, { surfaces, setSolid, addBarrier }) {
         const panels = [-1, 1].map((side) => {
             const closed = new THREE.Vector3(x + side * panelWidth / 2, DOOR_HEIGHT / 2, z);
             const panel = addPanel(geometry, material, closed, closed.clone().setX(closed.x + side * panelWidth));
+            // Glass, so no shadow
+            panel.mesh.userData.shadow = "none";
             panel.mesh.add(frame.clone());
             return panel;
         });

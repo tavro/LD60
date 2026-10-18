@@ -43,7 +43,7 @@ export function createTutorial({
         const shelf = shelves.find((shelf) => items.isOnShelf(box, shelf));
         if (!shelf) return false;
         if (shelf.userData.stock === box.userData.label) return true;
-        show(`That shelf's sign says ${shelf.userData.stock}, but the box is ${box.userData.label}. ` +
+        show(`That shelf's sign says ${shelf.userData.stock}, but this is ${box.userData.label}. ` +
             "Pick it up and find the matching sign.");
         return false;
     }
@@ -61,12 +61,12 @@ export function createTutorial({
             done: () => player.x < PARTITION_X,
         },
         {
-            text: "Look at a box on a storage shelf and click to pick it up.",
+            text: "Look at an item on a storage shelf and click to pick it up.",
             done: () => items.heldKind() === "box",
         },
         {
-            text: "Carry it into the shop and find the shelf whose sign matches the box's sticker. " +
-                "Look at the shelf and click to put the box in.",
+            text: "Carry it into the shop and find the shelf whose sign matches its sticker. " +
+                "Look at the shelf and click to put it in.",
             enter: () => { dropped = null; },
             done: droppedOnMatchingShelf,
         },
@@ -75,7 +75,7 @@ export function createTutorial({
             done: behindCounter,
         },
         {
-            text: "Here comes a customer. They put their box on the belt, which carries it to your left. " +
+            text: "Here comes a customer. They put what they buy on the belt, which carries it to your left. " +
                 "When it reaches the red SCAN zone at the end, click it to scan it.",
             enter: () => customers.spawnCustomer("regular", { ...patient, wants: [STOCK[0]] }),
             done: () => customers.stats.sold > since.sold,
@@ -107,7 +107,7 @@ export function createTutorial({
             done: () => messes.spillCount() === 0,
         },
         {
-            text: "Watch out for shoplifters: they grab a box, hide it under their arm and head for the door. " +
+            text: "Watch out for shoplifters: they grab an item, hide it under their arm and head for the door. " +
                 "Look at this one and click them before they get out!",
             enter: () => customers.spawnCustomer("thief", { speed: 0.6, wants: [STOCK[0]] }),
             update: () => {

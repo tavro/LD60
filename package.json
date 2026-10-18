@@ -5,6 +5,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@fontsource/press-start-2p": "^5.2.6",
     "cannon-es": "^0.20.0",
     "three": "0.186.1"
   },

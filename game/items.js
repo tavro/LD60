@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { playSfx } from "./sfx.js";
+import { HELD_LAYER } from "../scene/rendering.js";
 
 export function createItemSystem({
     scene, camera, player, surfaces, slots, physics, collides, getExtraTargets, onDrop, onMopUse, onUse, onGive,
@@ -15,6 +16,8 @@ export function createItemSystem({
     // Thrown items start this far in front of the player, and at least this far from what's in front
     const THROW_START = 1;
     const THROW_CLEARANCE = 0.8;
+    // How far the held item sways with the player's steps, side to side and up and down
+    const SWAY = { x: 0.06, y: 0.05 };
     // Where held items sit relative to the camera. The mop is held head down, leaning away
     const HOLD = {
         default: { position: new THREE.Vector3(1, -1.2, -2.5), rotation: new THREE.Euler() },
@@ -59,6 +62,7 @@ export function createItemSystem({
     ));
     ghost.name = "drop-ghost";
     ghost.visible = false;
+    ghost.userData.shadow = "none";
     scene.add(ghost);
 
     function itemOf(object) {
@@ -77,6 +81,11 @@ export function createItemSystem({
     function lookHit() {
         raycaster.setFromCamera(SCREEN_CENTER, camera);
         return firstHit(raycaster.ray.origin, raycaster.ray.direction, REACH);
+    }
+
+    // Drawn over everything else while held, so it doesn't sink into a wall the player stands close to
+    function drawOnTop(item, onTop) {
+        item.traverse((child) => child.layers.set(onTop ? HELD_LAYER : 0));
     }
 
     function setHighlight(item, on) {
@@ -138,6 +147,7 @@ export function createItemSystem({
         heldSize = new THREE.Box3().setFromObject(item).getSize(new THREE.Vector3());
 
         const hold = HOLD[item.userData.kind] ?? HOLD.default;
+        drawOnTop(item, true);
         camera.add(item);
         item.position.copy(hold.position);
         item.rotation.copy(hold.rotation);
@@ -221,6 +231,7 @@ export function createItemSystem({
         const landed = style === "throw" ? null : landing();
         const item = held;
         held = null;
+        drawOnTop(item, false);
 
         if (style === "throw") {
             // From a little in front of the player, but never inside a wall or door they're up
@@ -323,9 +334,29 @@ export function createItemSystem({
         ghost.scale.copy(heldSize);
     }
 
+    // Swaying with the player's steps
+    function updateHeld() {
+        if (!held) return;
+        const hold = HOLD[held.userData.kind] ?? HOLD.default;
+        held.position.set(
+            hold.position.x + player.bob.x * SWAY.x,
+            hold.position.y - player.bob.y * SWAY.y,
+            hold.position.z,
+        );
+    }
+
+    // The crosshair turns into a ring over something that can be picked up or used
+    const crosshair = document.getElementById("crosshair");
+
+    function updateCrosshair() {
+        crosshair.classList.toggle("aiming", target !== null);
+    }
+
     function update() {
         updateTarget();
         updateGhost();
+        updateHeld();
+        updateCrosshair();
     }
 
     return {

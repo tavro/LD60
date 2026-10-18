@@ -19,13 +19,8 @@ body {
   position: fixed;
   top: 50%;
   left: 50%;
-  width: 6px;
-  height: 6px;
-  margin: -3px 0 0 -3px;
-  border-radius: 50%;
-  background: #fff;
   pointer-events: none;
-  /* Above the canvas, which menu.css puts at z-index 0 */
+  /* Above the canvas, which menu.css puts at z-index 0. Its pixel-art look is in game/cursors.js */
   z-index: 1;
 }
 
@@ -37,7 +32,7 @@ body {
   transform: translateX(-50%);
   width: min(560px, calc(100% - 32px));
   padding: 14px 20px;
-  font: bold 18px/1.4 "Helvetica Neue", Arial, sans-serif;
+  font: 12px/1.8 "Press Start 2P", monospace;
   color: #222;
   background: #f4f4ef;
   border: 5px solid #222;
@@ -52,7 +47,8 @@ body {
 
 #tutorial-card small {
   display: block;
-  font-size: 13px;
+  margin-bottom: 6px;
+  font-size: 8px;
   letter-spacing: 2px;
   color: #c8322a;
 }

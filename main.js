@@ -1,9 +1,12 @@
 import * as THREE from "three";
+import { fontReady } from "./game/font.js";
+import "./game/cursors.js";
 import { createRendering } from "./scene/rendering.js";
 import { createEnvironment } from "./scene/environment.js";
 import { createModelSpawner } from "./scene/models.js";
 import { createFurniture } from "./scene/furniture.js";
 import { createDoors } from "./scene/doors.js";
+import { createLighting } from "./scene/lighting.js";
 import { createCollisionSystem } from "./game/collisions.js";
 import { createPlayer } from "./game/player.js";
 import { createControls } from "./game/controls.js";
@@ -23,7 +26,11 @@ import { createCustomerController } from "./npc/controller.js";
 import { createNPCSpeech } from "./npc/speech.js";
 import { showShiftPanel, setMenuOptions } from "./menu/menu.js";
 
-const { scene, camera, renderer } = createRendering();
+// Text on boxes, signs and menus is drawn in the pixel font, so it has to be loaded first
+await fontReady;
+
+const { scene, camera, renderer, composer } = createRendering();
+const lighting = createLighting(scene);
 const collisions = createCollisionSystem();
 createEnvironment(scene, collisions);
 const doors = createDoors(scene, collisions);
@@ -232,7 +239,8 @@ function animate(time) {
     }
     music.update(player.state.x);
     applySettings(renderer, music);
-    renderer.render(scene, camera);
+    lighting.update(dt);
+    composer.render();
 }
 
 renderer.setAnimationLoop(animate);

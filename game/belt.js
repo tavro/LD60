@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { PIXEL_FONT, pixelCanvasTexture } from "./font.js";
 
 // Conveyor belt in the channel along the desk's counter top. Customers put their item down at the
 // end on the cashier's right, and the belt carries it and anything else put on it to the left,
@@ -45,19 +46,18 @@ export function createBelt(scene, counterLoaded) {
     );
 
     const scanCanvas = document.createElement("canvas");
-    scanCanvas.width = 128;
-    scanCanvas.height = 192;
+    scanCanvas.width = 40;
+    scanCanvas.height = 64;
     const scanCtx = scanCanvas.getContext("2d");
     scanCtx.fillStyle = "#ff2a2a";
     scanCtx.fillRect(0, 0, scanCanvas.width, scanCanvas.height);
     scanCtx.fillStyle = "#fff";
-    scanCtx.fillRect(0, scanCanvas.height / 2 - 3, scanCanvas.width, 6);
-    scanCtx.font = "bold 40px sans-serif";
+    scanCtx.fillRect(0, scanCanvas.height / 2 - 1, scanCanvas.width, 2);
+    scanCtx.font = `8px ${PIXEL_FONT}`;
     scanCtx.textAlign = "center";
     scanCtx.textBaseline = "middle";
-    scanCtx.fillText("SCAN", scanCanvas.width / 2, 40);
-    const scanTexture = new THREE.CanvasTexture(scanCanvas);
-    scanTexture.colorSpace = THREE.SRGBColorSpace;
+    scanCtx.fillText("SCAN", scanCanvas.width / 2, 14, scanCanvas.width - 4);
+    const scanTexture = pixelCanvasTexture(scanCanvas);
     const scanMaterial = new THREE.MeshBasicMaterial({
         map: scanTexture,
         transparent: true,
@@ -65,6 +65,7 @@ export function createBelt(scene, counterLoaded) {
         depthWrite: false,
     });
     const scanner = new THREE.Mesh(new THREE.PlaneGeometry(1, CHANNEL_WIDTH), scanMaterial);
+    scanner.userData.shadow = "none";
     let flash = 0;
     let time = 0;
 

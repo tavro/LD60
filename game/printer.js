@@ -100,6 +100,7 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
         blob.position.set(x, 0, z);
         puddle.add(blob);
     }
+    puddle.userData.shadow = "receive";
     scene.add(puddle);
 
     let puddleSize = 0;

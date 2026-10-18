@@ -3,7 +3,7 @@ import { W, D, PARTITION_X, FRONT_DOOR } from "../scene/layout.js";
 import { STOCK } from "../game/stock.js";
 import { randomBetween } from "../game/utils.js";
 import { BELT_START } from "../game/belt.js";
-import { createNPC } from "./npc.js";
+import { createNPC, disposeNPC } from "./npc.js";
 
 // AI can also drive this animation by passing the distance moved each frame.
 export function createWalkingAnimation(npc) {
@@ -291,7 +291,7 @@ export function createCustomerController({
     }
 
     function spawn(type = pickType(shift.day), wants = Array.from({ length: type.items }, () => pick(STOCK))) {
-        const npc = createNPC({ id: `customer-${++spawned}`, shirtColor: type.shirt ?? pick(SHIRTS) });
+        const npc = createNPC({ id: `customer-${++spawned}`, shirtColor: type.shirt ?? pick(SHIRTS), look: type.name });
         npc.scale.setScalar(type.scale ?? 1);
         npc.position.copy(OUTSIDE);
         scene.add(npc);
@@ -480,6 +480,7 @@ export function createCustomerController({
         }
         speech.clear(customer.npc);
         customer.npc.removeFromParent();
+        disposeNPC(customer.npc);
         customers.splice(customers.indexOf(customer), 1);
     }
 

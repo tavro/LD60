@@ -37,6 +37,7 @@ export function createMesses({ scene, items, physics, tween }) {
             spill.add(blob);
         }
         spill.position.set(position.x, 0, position.z);
+        spill.userData.shadow = "receive";
         spill.rotation.y = Math.random() * Math.PI * 2;
         spill.userData.size = 1;
         scene.add(spill);
@@ -73,6 +74,7 @@ export function createMesses({ scene, items, physics, tween }) {
             player.z - (dx / distance) * 0.25 * side,
         );
         footprint.rotation.y = Math.atan2(dx, dz);
+        footprint.userData.shadow = "receive";
         scene.add(footprint);
         footprints.push(footprint);
 
