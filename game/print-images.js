@@ -1,35 +1,20 @@
 import * as THREE from "three";
 
-// Memes from these subreddits, through meme-api.com: ones that are mostly characters with little
-// text, so they read on a small printed page (r/Bossfight puts its jokes in the post titles, not
-// the pictures). Both meme-api.com and i.redd.it send CORS headers, which WebGL needs to use the
-// images
-const MEME_SUBREDDITS = ["ItalianBrainrot", "Bossfight"];
-const MEME_BATCH = 20;
-let memeUrls = [];
+// Character memes with little text, picked from r/ItalianBrainrot and r/Bossfight and bundled with
+// the game, so printing works offline and wherever the game is hosted. They're dealt out in a
+// random order, all of them before any repeats
+const PRINTS = Object.values(import.meta.glob("./prints/*.jpg", { eager: true, query: "?url", import: "default" }));
+let deck = [];
 
-async function nextMemeUrl() {
-    if (memeUrls.length === 0) {
-        const subreddit = MEME_SUBREDDITS[Math.floor(Math.random() * MEME_SUBREDDITS.length)];
-        const response = await fetch(`https://meme-api.com/gimme/${subreddit}/${MEME_BATCH}`);
-        const { memes } = await response.json();
-        memeUrls = memes
-            .filter((meme) => !meme.nsfw && !meme.spoiler && /\.(png|jpe?g)$/i.test(meme.url))
-            .map((meme) => meme.url);
-    }
-    const url = memeUrls.pop();
-    if (!url) throw new Error("No usable memes in batch");
-    return url;
+function nextPrintUrl() {
+    if (deck.length === 0) deck = [...PRINTS].sort(() => Math.random() - 0.5);
+    return deck.pop();
 }
 
-// A random meme stretched over a whole page, or a doodle if that doesn't load in time
+// A random meme stretched over a whole page, or a doodle if it can't be loaded
 export function randomImage() {
-    const download = nextMemeUrl()
-        .then((url) => new THREE.ImageLoader().loadAsync(url))
-        .then(onPage);
-    const timeout = new Promise((_, reject) => setTimeout(reject, 8000));
-
-    return Promise.race([download, timeout])
+    return new THREE.ImageLoader().loadAsync(nextPrintUrl())
+        .then(onPage)
         .catch(doodle)
         .then((texture) => {
             texture.colorSpace = THREE.SRGBColorSpace;

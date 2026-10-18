@@ -102,6 +102,15 @@ customers = createCustomerController({
     shelvesLoaded: shopShelvesLoaded,
     counterLoaded,
 });
+// Customers shove loose items out of their way
+physics.setMovers(() => customers.bodies().map(({ x, z, radius, customer }) => ({
+    key: customer,
+    x,
+    z,
+    radius,
+    height: 4 * (customer.type.scale ?? 1),
+})));
+
 // Customers and the player bump into each other
 collisions.setBodies(() => [
     { x: player.state.x, z: player.state.z, radius: player.radius, player: true },
