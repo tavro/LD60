@@ -1,5 +1,6 @@
 import menuHtml from "./menu.html?raw";
 import { settings } from "../settings.js";
+import { playSfx } from "../game/sfx.js";
 import "./menu.css";
 
 document.body.insertAdjacentHTML("beforeend", menuHtml);
@@ -9,6 +10,7 @@ const mainPanel = document.querySelector("#main-panel");
 const settingsPanel = document.querySelector("#settings-panel");
 const shiftPanel = document.querySelector("#shift-panel");
 const volume = document.querySelector("#volume");
+const sfxVolume = document.querySelector("#sfx-volume");
 const brightness = document.querySelector("#brightness");
 const mouseSensitivity = document.querySelector("#mouse-sensitivity");
 
@@ -48,6 +50,7 @@ export function showShiftPanel({ title, lines, upgrades = [], button, onContinue
         option.append(description);
         option.disabled = !upgrade.available;
         option.addEventListener("click", upgrade.onBuy);
+		option.addEventListener("click", () => playSfx("click"));
         return option;
     }));
 
@@ -62,22 +65,30 @@ export function hideMenu() {
 
 
 volume.value = settings.volume;
+sfxVolume.value = settings.sfxVolume;
 brightness.value = settings.brightness;
 mouseSensitivity.value = settings.mouseSensitivity;
 
 document.querySelector("#settings").addEventListener("click", () => {
   mainPanel.hidden = true;
   settingsPanel.hidden = false;
+  playSfx("click");
 });
 
 document.querySelector("#settings-back").addEventListener("click", () => {
   settingsPanel.hidden = true;
   mainPanel.hidden = false;
+  playSfx("click");
 });
 
 volume.addEventListener("input", () => {
   settings.volume = Number(volume.value);
   // Apply settings.volume to your audio system here.
+});
+
+sfxVolume.addEventListener("input", () => {
+  settings.sfxVolume = Number(sfxVolume.value);
+  // Apply settings.sfxVolume to your audio system here.
 });
 
 brightness.addEventListener("input", () => {

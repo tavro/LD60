@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { playSfx } from "./sfx.js";
 
 export function createItemSystem({
     scene, camera, player, surfaces, slots, physics, collides, getExtraTargets, onDrop, onMopUse, onUse, onGive,
@@ -120,6 +121,11 @@ export function createItemSystem({
 
     function pickUp(item) {
         physics.release(item);
+        if (item.userData.kind === "paper" || item.userData.kind === "print") {
+            playSfx("paper");
+        } else {
+            playSfx("pickup");
+        }
         setHighlight(item, false);
         target = null;
 
@@ -204,6 +210,11 @@ export function createItemSystem({
     }
 
     function drop() {
+        if (held.userData.kind === "paper" || held.userData.kind === "print") {
+            playSfx("paper");
+        } else {
+            playSfx("drop");
+        }
         const aimed = lookHit();
         const style = dropStyle(aimed);
         // Worked out while still holding the item, since where it lands depends on what it is

@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { W, D, INNER, PARTITION_X } from "../scene/layout.js";
 import { randomBetween, isPartOf } from "./utils.js";
 import { randomImage } from "./print-images.js";
+import { playSfx } from "./sfx.js";
 
 export function createPrinterSystem({ scene, items, collides, tween, printerLoaded, retag }) {
     const { addItem, removeItem, firstHit } = items;
@@ -153,6 +154,7 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
 
     // Shrinks the item into the printer and removes it
     async function swallow(item) {
+		playSfx("electricPress");
         removeItem(item);
         await tween(0.5, (t) => item.scale.setScalar(1 - 0.95 * t));
         item.removeFromParent();
@@ -186,6 +188,7 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
             page.rotation.set(Math.sin(t * Math.PI) * 0.4, spin * t, 0);
         });
 
+		playSfx("electricSuccess");
         scene.attach(page);
         addItem(page, inked ? "print" : "paper");
         if (inked) stats.prints++;
