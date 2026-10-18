@@ -152,7 +152,6 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
 
     // Shrinks the item into the printer and removes it
     async function swallow(item) {
-		playSfx("electricPress");
         removeItem(item);
         await tween(0.5, (t) => item.scale.setScalar(1 - 0.95 * t));
         item.removeFromParent();
@@ -166,10 +165,15 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
 
         //printer sound
         if (inked) {
+			playSfx("electricSuccess");
             printerSound.currentTime = 0;
             printerSound.volume = 0.6 * settings.sfxVolume;
             printerSound.play().catch((err) => console.warn("Printer sound failed to play:", err));
         }
+		else {
+			// play error sound when we're out of ink
+			playSfx("electricError");
+		}
 
         const page = makePaper(image);
         page.position.set(0, SLOT_Y, SLOT_START_Z);
@@ -187,8 +191,10 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
             page.rotation.set(Math.sin(t * Math.PI) * 0.4, spin * t, 0);
         });
 
-		playSfx("electricSuccess");
-        scene.attach(page);
+		// Only notify if the page was successfully printed
+		if (inked) playSfx("electricPress");
+	
+		scene.attach(page);
         addItem(page, inked ? "print" : "paper");
         if (inked) stats.prints++;
     }
@@ -198,13 +204,20 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
     function feedPrinter(item) {
         const kind = item.userData.kind;
         if (kind === "box" && printer.ink >= INK_PER_STICKER) {
+			playSfx("electricSuccess");
             item.position.copy(printer.group.localToWorld(PRINTER_TOP.clone()));
             printer.ink -= INK_PER_STICKER;
             retag(item);
             stats.retags++;
             tween(0.3, (t) => item.scale.setScalar(1 + Math.sin(t * Math.PI) * 0.15));
         }
+
+		if (kind === "box" && printer.ink < INK_PER_STICKER) {
+			playSfx("electricError");
+		}
+
         if (kind === "paper" || kind === "cartridge") {
+			playSfx("electricSuccess");
             item.position.copy(printer.group.localToWorld(PRINTER_TOP.clone()));
         }
 

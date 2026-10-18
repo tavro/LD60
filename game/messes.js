@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { PARTITION_X } from "../scene/layout.js";
 import { createPixelPuddle, footprintMesh } from "./puddles.js";
+import { playSfx } from "./sfx.js";
 
 // Messes on the shop floor: drinks customers spill, ink footprints the player tracks out of the
 // puddle by the printer, and loose boxes lying around. Each one makes customers lose patience
@@ -104,6 +105,7 @@ export function createMesses({ scene, items, physics, tween }) {
 
         const spill = spills.find((spill) => near(spill, spill.userData.size + SCRUB_RADIUS));
         if (spill) {
+			playSfx("mop");
             spill.userData.size -= SCRUB_AMOUNT;
             if (spill.userData.size < CLEAN_BELOW) remove(spills, spill);
             else spill.userData.puddle.setSize(spill.userData.size);

@@ -19,6 +19,11 @@ const SFX = {
     electricError: "sfx/ld60_sfx_electric_error.mp3",
     electricFail: "sfx/ld60_sfx_electric_fail.mp3",
     electricNotification: "sfx/ld60_sfx_electric_notification.mp3",
+	mop: [
+		"sfx/ld60_sfx_mop_1.mp3",
+		"sfx/ld60_sfx_mop_2.mp3",
+		"sfx/ld60_sfx_mop_3.mp3",
+	]
 };
 
 // Volume from the settings menu, read every time a sound plays
