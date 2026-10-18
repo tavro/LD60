@@ -160,7 +160,7 @@ function prepareShift(day) {
         console.warn("Delivery arrival failed:", error);
     }
     register.show({ day: 0, time: "Restocking" });
-    setMenuOptions({ play: "▶ Back to preparation", tutorial: false, skip: false });
+    setMenuOptions({ play: "Back to preparation", tutorial: false, skip: false });
     preparationCard.hidden = false;
 }
 
@@ -180,7 +180,7 @@ function beginShift(day) {
     nextDay = null;
     shiftButton.setActive(false);
     preparationCard.hidden = true;
-    setMenuOptions({ play: "▶ Back to work", tutorial: false, skip: false });
+    setMenuOptions({ play: "Back to work", tutorial: false, skip: false });
 }
 
 shiftButton = createShiftButton({ counterLoaded, onPress: startPreparedShift });
@@ -274,7 +274,7 @@ function showShiftResult(result) {
             "Collect the next delivery at the front door during preparation.",
         ],
         upgrades,
-        button: success ? `▶ Prepare day ${day + 1}` : "▶ Prepare to try again",
+        button: success ? `Prepare day ${day + 1}` : "Prepare to try again",
         onContinue: () => {
             prepareShift(success ? day + 1 : day);
             controls.resume();

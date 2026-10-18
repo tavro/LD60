@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { PIXEL_FONT, pixelCanvasTexture } from "./font.js";
 import { FRONT_DOOR, PARTITION_X, W, D } from "../scene/layout.js";
 import { STOCK } from "./stock.js";
 
@@ -36,20 +37,20 @@ export function createDeliverySystem({ scene, items, physics, placeBox, collides
         const tape = new THREE.MeshStandardMaterial({ color: 0xe2c391 });
         carton.add(new THREE.Mesh(new THREE.BoxGeometry(1.8, 1.6, 1.6).translate(0, 0.8, 0), cardboard));
         carton.add(new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.025, 1.62).translate(0, 1.61, 0), tape));
+        // Small and in the pixel font, like the other signs
         const canvas = document.createElement("canvas");
-        canvas.width = 256;
-        canvas.height = 128;
+        canvas.width = 80;
+        canvas.height = 40;
         const context = canvas.getContext("2d");
         context.fillStyle = "#f4f4ef";
-        context.fillRect(0, 0, 256, 128);
+        context.fillRect(0, 0, canvas.width, canvas.height);
         context.fillStyle = "#222";
-        context.font = "bold 36px sans-serif";
+        context.font = `8px ${PIXEL_FONT}`;
         context.textAlign = "center";
-        context.fillText("DELIVERY", 128, 52);
-        context.font = "28px sans-serif";
-        context.fillText("STOCK", 128, 96);
-        const texture = new THREE.CanvasTexture(canvas);
-        texture.colorSpace = THREE.SRGBColorSpace;
+        context.textBaseline = "middle";
+        context.fillText("DELIVERY", canvas.width / 2, 14);
+        context.fillText("STOCK", canvas.width / 2, 27);
+        const texture = pixelCanvasTexture(canvas);
         // Face into the shop from just inside the entrance, beside the doorway.
         const label = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 0.65),
             new THREE.MeshStandardMaterial({ map: texture }));

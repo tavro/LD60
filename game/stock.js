@@ -9,7 +9,7 @@ function pick(list) {
 export const STOCK = [
     // `model` and `scale` are the item's model, if it isn't a placeholder box
     { label: "Mouse", color: "#c8322a", price: 3, model: "mouse", scale: 2 },
-    { label: "Item 2", color: "#2a6fc8", price: 5 },
+    { label: "Tape recorder", color: "#2a6fc8", price: 5, model: "tape_recorder", scale: 2.5 },
     { label: "Item 3", color: "#2e9a48", price: 8 },
     { label: "Item 4", color: "#e09a12", price: 12 },
 ];
@@ -45,19 +45,24 @@ export function createStockSystem({ spawn, addItem, slots }) {
     }
 
     // Label stickers on the front of boxes (their local +z side, which faces out of the shelf)
-    const LABEL_GEOMETRY = new THREE.PlaneGeometry(0.9, 0.34);
+    const LABEL_WIDTH = 0.9;
+    const LABEL_GEOMETRY = new THREE.PlaneGeometry(LABEL_WIDTH, 0.34);
+    // Sticker texture width in pixels for a short name
+    const LABEL_PIXELS = 96;
     const labelTextures = {};
 
     // The item's name and a price, in a border of its color
     function labelTexture({ label, color }, price) {
         const key = `${label} $${price}`;
         if (!labelTextures[key]) {
-            // Small, so the pixel font's pixels show
+            // Small, so the pixel font's pixels show, and wider than LABEL_PIXELS for long names
+            // rather than squeezing the text
             const canvas = document.createElement("canvas");
-            canvas.width = 96;
+            const ctx = canvas.getContext("2d");
+            ctx.font = `8px ${PIXEL_FONT}`;
+            canvas.width = Math.max(LABEL_PIXELS, Math.ceil(ctx.measureText(key).width / 2) * 2 + 16);
             canvas.height = 36;
             // Bars of the item's color around the edge
-            const ctx = canvas.getContext("2d");
             ctx.fillStyle = "#f4f4ef";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             ctx.fillStyle = color;
@@ -69,11 +74,24 @@ export function createStockSystem({ spawn, addItem, slots }) {
             ctx.font = `8px ${PIXEL_FONT}`;
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
-            ctx.fillText(key, canvas.width / 2, canvas.height / 2, canvas.width - 10);
+            ctx.fillText(key, canvas.width / 2, canvas.height / 2);
 
-            labelTextures[key] = pixelCanvasTexture(canvas);
+            const texture = pixelCanvasTexture(canvas);
+            // How much wider than usual it is, for the sticker or sign to widen with it
+            texture.userData.widthScale = canvas.width / LABEL_PIXELS;
+            labelTextures[key] = texture;
         }
         return labelTextures[key];
+    }
+
+    // Puts the texture on a sticker, widened for long names but no wider than `maxWidth`, shrinking
+    // it all over if needed
+    function fitSticker(sticker, texture, maxWidth) {
+        sticker.material.map = texture;
+        const widthScale = texture.userData.widthScale;
+        const scale = Math.min(1, maxWidth / (LABEL_WIDTH * widthScale));
+        sticker.scale.set(scale * widthScale, scale, scale);
+        sticker.userData.maxWidth = maxWidth;
     }
 
     // Sign on top of a shelf, at the front of its open side, saying which item belongs there
@@ -85,9 +103,11 @@ export function createStockSystem({ spawn, addItem, slots }) {
         shelf.userData.stock = stock.label;
 
         const back = new THREE.MeshStandardMaterial({ color: 0x222222 });
-        const front = new THREE.MeshStandardMaterial({ map: labelTexture(stock, stock.price) });
-        // BoxGeometry faces are +x, -x, +y, -y, +z, -z; the label goes on the front
+        const texture = labelTexture(stock, stock.price);
+        const front = new THREE.MeshStandardMaterial({ map: texture });
+        // BoxGeometry faces are +x, -x, +y, -y, +z, -z; the label goes on the front. Wider for long names
         const sign = new THREE.Mesh(new THREE.BoxGeometry(...SIGN_SIZE), [back, back, back, back, front, back]);
+        sign.scale.x = texture.userData.widthScale;
         const { y: height, z: depth } = shelf.userData.size;
         sign.position.set(0, height + SIGN_SIZE[1] / 2, depth / 2 - SIGN_SIZE[2]);
         shelf.add(sign);
@@ -114,10 +134,7 @@ export function createStockSystem({ spawn, addItem, slots }) {
         const wrong = Math.random() < WRONG_TAG_CHANCE;
         const tagPrice = slot.tagPrice ?? (wrong ? Math.max(1, stock.price + pick(WRONG_TAG_OFFSETS)) : stock.price);
 
-        const label = new THREE.Mesh(
-            LABEL_GEOMETRY,
-            new THREE.MeshStandardMaterial({ map: labelTexture(stock, tagPrice) }),
-        );
+        const label = new THREE.Mesh(LABEL_GEOMETRY, new THREE.MeshStandardMaterial());
         // On the front of boxes, or lying on top of flat things like the mouse, tilted towards the
         // front, sized to fit
         const size = item.userData.size;
@@ -126,8 +143,8 @@ export function createStockSystem({ spawn, addItem, slots }) {
         } else {
             label.position.set(0, size.y + 0.02, 0);
             label.rotation.x = -Math.PI / 2 + 0.6;
-            label.scale.setScalar(Math.min(1, size.x / 0.9));
         }
+        fitSticker(label, labelTexture(stock, tagPrice), size.x * 1.05);
         item.add(label);
         item.userData.label = stock.label;
         item.userData.tagPrice = tagPrice;
@@ -140,7 +157,8 @@ export function createStockSystem({ spawn, addItem, slots }) {
     function retag(item) {
         const stock = stockFor(item.userData.label);
         item.userData.tagPrice = stock.price;
-        item.userData.sticker.material.map = labelTexture(stock, stock.price);
+        const sticker = item.userData.sticker;
+        fitSticker(sticker, labelTexture(stock, stock.price), sticker.userData.maxWidth);
     }
 
     return { shelfSlots, placeBox, spawnShelf, retag };

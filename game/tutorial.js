@@ -82,9 +82,9 @@ export function createTutorial({
             done: () => customers.stats.sold > since.sold,
         },
         {
-            text: `Some stickers show the wrong price; the shelf signs are always right. The box behind ` +
-                `you says $9, but ${wrongTag.label} costs $${wrongTag.price}. Take it to the printer in the ` +
-                "storage room and drop it on top to print a new sticker.",
+            text: `Some stickers show the wrong price; the shelf signs are always right. The ` +
+                `${wrongTag.label.toLowerCase()} behind you says $9, but it costs $${wrongTag.price}. Take it to the ` +
+                "printer in the storage room and drop it on top to print a new sticker.",
             enter: () => {
                 printer.refill();
                 const position = counter.localToWorld(new THREE.Vector3(1, 0, -3.2));

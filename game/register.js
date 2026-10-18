@@ -40,6 +40,7 @@ export function createRegister(scene, counterLoaded) {
         if (day === 0) {
             ctx.fillStyle = "#222";
             ctx.font = `16px ${PIXEL_FONT}`;
+            if (ctx.measureText(time).width > fit) ctx.font = `8px ${PIXEL_FONT}`;
             ctx.fillText(time, middle, canvas.height / 2 + 2, fit);
             texture.needsUpdate = true;
             return;

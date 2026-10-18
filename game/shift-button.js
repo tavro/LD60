@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { PIXEL_FONT, pixelCanvasTexture } from "./font.js";
 
 export function shiftStartProblems({ delivery, messes, printer }) {
     const problems = [];
@@ -24,19 +25,19 @@ export function createShiftButton({ counterLoaded, onPress }) {
     light.position.set(0, 0.6, 0.15);
     button.add(light);
 
+    // Small and in the pixel font, like the other signs
     const canvas = document.createElement("canvas");
-    canvas.width = 256;
-    canvas.height = 64;
+    canvas.width = 104;
+    canvas.height = 26;
     const context = canvas.getContext("2d");
     context.fillStyle = "#f4f4ef";
-    context.fillRect(0, 0, 256, 64);
+    context.fillRect(0, 0, canvas.width, canvas.height);
     context.fillStyle = "#222";
-    context.font = "bold 34px sans-serif";
+    context.font = `8px ${PIXEL_FONT}`;
     context.textAlign = "center";
     context.textBaseline = "middle";
-    context.fillText("START SHIFT", 128, 32);
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.colorSpace = THREE.SRGBColorSpace;
+    context.fillText("START SHIFT", canvas.width / 2, canvas.height / 2);
+    const texture = pixelCanvasTexture(canvas);
     const label = new THREE.Mesh(new THREE.PlaneGeometry(1.05, 0.26),
         new THREE.MeshStandardMaterial({ map: texture }));
     label.rotation.x = -Math.PI / 2;
