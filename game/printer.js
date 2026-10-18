@@ -3,7 +3,7 @@ import { W, D, INNER, PARTITION_X } from "../scene/layout.js";
 import { randomBetween, isPartOf } from "./utils.js";
 import { randomImage } from "./print-images.js";
 
-export function createPrinterSystem({ scene, items, collides, tween, printerLoaded }) {
+export function createPrinterSystem({ scene, items, collides, tween, printerLoaded, retag }) {
     const { addItem, removeItem, firstHit } = items;
     const DOWN = new THREE.Vector3(0, -1, 0);
 
@@ -22,6 +22,7 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
     const PUDDLE_AT = new THREE.Vector3(0.8, 0.02, 1.6);
 
     const INK_PER_PRINT = 0.1;
+    const INK_PER_STICKER = 0.05;
     const LEAK_RATE = 0.008;
     const LEAK_DELAY = [90, 150];
     const DRIP_INTERVAL = 0.3;
@@ -175,9 +176,16 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
         addItem(page, inked ? "print" : "paper");
     }
 
-    // Called with an item that was just dropped while looking at the printer
+    // Called with an item that was just dropped while looking at the printer. Boxes get a new
+    // sticker with the right price, when there's ink for it, and stay on top
     function feedPrinter(item) {
         const kind = item.userData.kind;
+        if (kind === "box" && printer.ink >= INK_PER_STICKER) {
+            item.position.copy(printer.group.localToWorld(PRINTER_TOP.clone()));
+            printer.ink -= INK_PER_STICKER;
+            retag(item);
+            tween(0.3, (t) => item.scale.setScalar(1 + Math.sin(t * Math.PI) * 0.15));
+        }
         if (kind === "paper" || kind === "cartridge") {
             item.position.copy(printer.group.localToWorld(PRINTER_TOP.clone()));
         }
@@ -243,5 +251,10 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
         return true;
     }
 
-    return { initialize, update: updatePrinter, puddle, handleDrop, tryScrub };
+    // Whether that spot on the floor is in the ink puddle
+    function inInk(x, z) {
+        return puddle.visible && Math.hypot(x - puddle.position.x, z - puddle.position.z) < puddleSize * 1.3;
+    }
+
+    return { initialize, update: updatePrinter, puddle, handleDrop, tryScrub, inInk };
 }

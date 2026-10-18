@@ -1,6 +1,6 @@
 import * as THREE from "three";
 
-export function createItemSystem({ scene, camera, player, surfaces, slots, getExtraTargets, onDrop, onMopUse, onUse }) {
+export function createItemSystem({ scene, camera, player, surfaces, slots, getExtraTargets, onDrop, onMopUse, onUse, onGive }) {
     const REACH = 6;
     const DROP_DISTANCE = 1.5;
     // Items this close to the crosshair (in radians) count as aimed at, so they're easier to grab
@@ -198,6 +198,16 @@ export function createItemSystem({ scene, camera, player, surfaces, slots, getEx
             if (onMopUse(held, hit)) return;
         }
 
+        // Handing the held item to someone, like a print to the customer who ordered it. They
+        // can also refuse it, which keeps it in hand
+        const given = held && onGive(held);
+        if (given === "given") {
+            held.removeFromParent();
+            removeItem(held);
+            held = null;
+        }
+        if (given) return;
+
         // Clicking something that isn't picked up, like a customer's box on the counter
         if (!held && onUse(target ? { object: target } : lookHit())) return;
 
@@ -205,13 +215,15 @@ export function createItemSystem({ scene, camera, player, surfaces, slots, getEx
         else if (target) pickUp(target);
     }
 
-    // A box with the given label standing on the shelf, that nobody has claimed
+    // A box with the given label (or any box, for null) standing on the shelf, that nobody has
+    // claimed
     function findShelfItem(shelf, label) {
         shelf.updateWorldMatrix(true, false);
         const { x: width, y: height, z: depth } = shelf.userData.size;
         return items.find((item) => {
             if (item === held || item.userData.carrier || item.userData.forSale) return false;
-            if (item.userData.label !== label || !item.visible) return false;
+            if (item.userData.kind !== "box" || !item.visible) return false;
+            if (label !== null && item.userData.label !== label) return false;
             const local = shelf.worldToLocal(item.getWorldPosition(new THREE.Vector3()));
             return Math.abs(local.x) <= width / 2 && Math.abs(local.z) <= depth / 2 &&
                 local.y >= 0 && local.y <= height;
@@ -252,5 +264,8 @@ export function createItemSystem({ scene, camera, player, surfaces, slots, getEx
         updateGhost();
     }
 
-    return { addItem, removeItem, firstHit, interact, update, findShelfItem, takeForNPC, placeFromNPC };
+    return {
+        addItem, removeItem, firstHit, interact, update, findShelfItem, takeForNPC, placeFromNPC,
+        list: () => items,
+    };
 }

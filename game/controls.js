@@ -1,6 +1,6 @@
 import { showMenu, hideMenu } from "../menu/menu.js";
 
-export function createControls({ renderer, player, interact, onPause = () => {} }) {
+export function createControls({ renderer, player, interact, onPlay = () => {}, onPause = () => {} }) {
     const { keys, moveKeys: MOVE_KEYS } = player;
 
     // Menu
@@ -8,15 +8,33 @@ export function createControls({ renderer, player, interact, onPause = () => {} 
     // The world is built and rendered behind the menu from the start, but only runs while playing
 
     let playing = false;
+    // Between shifts, when the shift screen is up instead of the menu
+    let stopped = false;
 
-    document.querySelector("#play").addEventListener("click", (event) => {
-        event.currentTarget.textContent = "▶ Back to work";
+    function resume() {
+        stopped = false;
         hideMenu();
         playing = true;
         renderer.domElement.requestPointerLock();
+    }
+
+    document.querySelector("#play").addEventListener("click", (event) => {
+        event.currentTarget.textContent = "▶ Back to work";
+        onPlay();
+        resume();
     });
 
+    // Pauses without the menu, for the caller to show something else
+    function stop() {
+        stopped = true;
+        playing = false;
+        keys.clear();
+        onPause();
+        if (document.pointerLockElement) document.exitPointerLock();
+    }
+
     function openMenu() {
+        if (stopped) return;
         playing = false;
         keys.clear();
         onPause();
@@ -51,5 +69,5 @@ export function createControls({ renderer, player, interact, onPause = () => {} 
         player.look(e.movementX, e.movementY);
     });
 
-    return { get playing() { return playing; } };
+    return { stop, resume, get playing() { return playing; } };
 }

@@ -1,35 +1,42 @@
 import * as THREE from "three";
 
-// Sign hanging over the counter with the takings and how many customers walked out, readable from
-// the shop floor and from behind the counter
+// Sign hanging over the counter with how the shift is going, readable from the shop floor and from
+// behind the counter
 export function createRegister(scene, counterLoaded) {
     const canvas = document.createElement("canvas");
     canvas.width = 512;
     canvas.height = 256;
     const texture = new THREE.CanvasTexture(canvas);
     texture.colorSpace = THREE.SRGBColorSpace;
+    let shown = "";
 
-    let money = 0;
-    let walkouts = 0;
+    // `status` has the day, the time left as text, takings and target, walkouts and the most allowed,
+    // and whether it's rush hour
+    function show({ day, time, takings, target, walkouts, maxWalkouts, rush }) {
+        const text = JSON.stringify([day, time, takings, target, walkouts, rush]);
+        if (text === shown) return;
+        shown = text;
 
-    function draw() {
         const ctx = canvas.getContext("2d");
         ctx.fillStyle = "#f4f4ef";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.strokeStyle = "#222";
+        ctx.strokeStyle = rush ? "#c8322a" : "#222";
         ctx.lineWidth = 24;
         ctx.strokeRect(12, 12, canvas.width - 24, canvas.height - 24);
-        ctx.fillStyle = "#222";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.font = "bold 120px sans-serif";
-        ctx.fillText(`$${money}`, canvas.width / 2, 110);
-        ctx.font = "bold 40px sans-serif";
+
+        ctx.font = "bold 38px sans-serif";
+        ctx.fillStyle = rush ? "#c8322a" : "#222";
+        ctx.fillText(rush ? `RUSH HOUR · ${time}` : `Day ${day} · ${time}`, canvas.width / 2, 58);
+        ctx.font = "bold 92px sans-serif";
+        ctx.fillStyle = takings >= target ? "#2e9a48" : "#222";
+        ctx.fillText(`$${takings} / $${target}`, canvas.width / 2, 132, canvas.width - 64);
+        ctx.font = "bold 38px sans-serif";
         ctx.fillStyle = walkouts ? "#c8322a" : "#222";
-        ctx.fillText(`Walkouts: ${walkouts}`, canvas.width / 2, 200);
+        ctx.fillText(`Walkouts: ${walkouts} / ${maxWalkouts}`, canvas.width / 2, 204);
         texture.needsUpdate = true;
     }
-    draw();
 
     const face = new THREE.MeshStandardMaterial({ map: texture });
     const edge = new THREE.MeshStandardMaterial({ color: 0x222222 });
@@ -43,15 +50,5 @@ export function createRegister(scene, counterLoaded) {
         scene.add(sign);
     });
 
-    function sell(price) {
-        money += price;
-        draw();
-    }
-
-    function walkout() {
-        walkouts++;
-        draw();
-    }
-
-    return { sell, walkout };
+    return { show };
 }

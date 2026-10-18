@@ -12,7 +12,7 @@ const BELT_Z = 1;
 // Where items' centers start and stop, half a box in from the ends
 export const BELT_START = -CHANNEL_LENGTH / 2 + 0.5;
 const BELT_END = CHANNEL_LENGTH / 2 - 0.5;
-const SPEED = 0.6;
+const BASE_SPEED = 0.6;
 const GAP = 1.2;
 
 export function createBelt(scene, counterLoaded) {
@@ -20,6 +20,7 @@ export function createBelt(scene, counterLoaded) {
     const onBelt = [];
     let counter = null;
     let top = 0;
+    let speed = BASE_SPEED;
 
     const canvas = document.createElement("canvas");
     canvas.width = 64;
@@ -87,7 +88,7 @@ export function createBelt(scene, counterLoaded) {
 
     function update(dt) {
         if (!counter) return;
-        texture.offset.x -= SPEED * dt * texture.repeat.x / CHANNEL_LENGTH;
+        texture.offset.x -= speed * dt * texture.repeat.x / CHANNEL_LENGTH;
 
         // Items the player picked back up are off the belt
         for (const item of onBelt.filter((item) => item.parent !== scene)) remove(item);
@@ -96,11 +97,20 @@ export function createBelt(scene, counterLoaded) {
         for (const item of onBelt) {
             // Never pushed backwards when put down too close to the item in front
             const x = item.userData.beltX;
-            item.userData.beltX = Math.max(x, Math.min(x + SPEED * dt, limit));
+            item.userData.beltX = Math.max(x, Math.min(x + speed * dt, limit));
             item.position.copy(positionAt(item.userData.beltX));
             limit = item.userData.beltX - GAP;
         }
     }
 
-    return { hasRoom, place, remove, handleDrop, update };
+    // Whether the item has reached the cashier's end, where it can be scanned
+    function atEnd(item) {
+        return onBelt.includes(item) && item.userData.beltX >= BELT_END - 0.05;
+    }
+
+    function setSpeed(multiplier) {
+        speed = BASE_SPEED * multiplier;
+    }
+
+    return { hasRoom, place, remove, handleDrop, atEnd, setSpeed, update };
 }

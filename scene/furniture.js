@@ -1,4 +1,4 @@
-import { W, INNER, WALL_THICKNESS } from "./layout.js";
+import { W, INNER, WALL_THICKNESS, PARTITION_X } from "./layout.js";
 import { STOCK } from "../game/stock.js";
 
 // Shelves are open on local +Z; rotate that side towards the aisle.
@@ -41,6 +41,18 @@ export function createFurniture({ spawn, shelfSlots, placeBox, restock, spawnShe
         spawnShopShelf({ x: W - WALL_THICKNESS / 2 - 1, z, rotation: FACE_LEFT }, STOCK[i]);
     });
 
+    // Bought as upgrades: shelves along the shop side of the partition
+    const EXTRA_SHELVES = [
+        { x: PARTITION_X + WALL_THICKNESS / 2 + 1, z: 3, rotation: FACE_RIGHT, stock: STOCK[2] },
+        { x: PARTITION_X + WALL_THICKNESS / 2 + 1, z: 8, rotation: FACE_RIGHT, stock: STOCK[3] },
+    ];
+
+    function addExtraShelf(index) {
+        const { stock, ...options } = EXTRA_SHELVES[index];
+        spawnShopShelf(options, stock);
+        return shopShelves.at(-1);
+    }
+
     // Desk in the bottom right corner: counter along the room side, with two legs reaching towards the
     // right wall and a gap between them to stand in. Leaves a walkway to the walls behind it
     const counterLoaded = spawn("desk", {
@@ -54,5 +66,5 @@ export function createFurniture({ spawn, shelfSlots, placeBox, restock, spawnShe
         ],
     });
 
-    return { printerLoaded, shopShelvesLoaded: Promise.all(shopShelves), counterLoaded };
+    return { printerLoaded, shopShelvesLoaded: Promise.all(shopShelves), counterLoaded, addExtraShelf };
 }
