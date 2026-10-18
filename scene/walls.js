@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { WALL_HEIGHT } from "./layout.js";
+import { pixelateLighting } from "./lighting.js";
 
 // The wall texture covers the full wall height and repeats along the wall every TILE_WIDTH
 const TILE_WIDTH = 2;
@@ -15,7 +16,7 @@ export function wallMaterial() {
         texture.wrapT = THREE.RepeatWrapping;
         // Pixel art, so it stays crisp up close
         texture.magFilter = THREE.NearestFilter;
-        material = new THREE.MeshStandardMaterial({ map: texture });
+        material = pixelateLighting(new THREE.MeshStandardMaterial({ map: texture }));
     }
     return material;
 }

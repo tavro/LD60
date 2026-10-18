@@ -10,6 +10,8 @@ import { createNPC, disposeNPC } from "./npc.js";
 const CARRY_ARMS = -1.1;
 const HAND_HEIGHT = 2.65;
 const HAND_FORWARD = 1.05;
+// How far the front of the chest is from the middle
+const TORSO_FRONT = 0.4;
 
 // AI can also drive this animation by passing the distance moved each frame, and whether the arms
 // are carrying something in front
@@ -71,8 +73,10 @@ const ACCUSE_PENALTY = 10;
 const PRINT_PRICE = 10;
 // Customers keep this far apart from each other and the player. They steer away from anyone within
 // AVOID_MARGIN of touching, passing on the right, and step aside at these angles (in radians) if
-// they'd still bump into someone. Two customers stuck on each other for SQUEEZE_AFTER seconds
-// squeeze past for SQUEEZE_TIME, so a jam never lasts; the player has to step aside themselves
+// they'd still bump into someone. Someone still in the way makes them stop and wait (WAIT_TIME,
+// rather than trying again every frame), then look for a way around them every REROUTE_EVERY. Only
+// when that hasn't helped for GIVE_UP_AFTER does whoever came in first squeeze past for
+// SQUEEZE_TIME, so a jam never lasts; the player has to step aside themselves
 const BODY_RADIUS = 0.8;
 // Pushed away from anyone within AVOID_MARGIN of touching. Someone actually in the way ahead, within
 // PASS_MARGIN, is passed on whichever side they're not on, so people slide past each other instead
@@ -82,7 +86,12 @@ const AVOID_STRENGTH = 1.5;
 const PASS_MARGIN = 2.5;
 const PASS_STRENGTH = 2.5;
 const STEER_RATE = 6;
-const SIDESTEPS = [0, 0.5, -0.5, 1.1, -1.1];
+const SIDESTEPS = [0, 0.4, -0.4, 0.8, -0.8];
+const WAIT_TIME = [0.4, 0.7];
+const REROUTE_EVERY = 1;
+const GIVE_UP_AFTER = 5;
+// Blocked this long this close to where they're going, they stop where they are instead
+const CLOSE_ENOUGH = { distance: 2, after: 1.5 };
 // How quickly they turn towards where they're heading, and how close counts as reaching a point
 const TURN_RATE = 8;
 const ARRIVE_DISTANCE = 0.15;
@@ -93,10 +102,9 @@ const ACCELERATION = 10;
 const ARRIVE_SLOWDOWN = 3;
 // Spots along a shelf's front, so shoppers at the same shelf don't aim for the same place
 const SHELF_SPOTS = [0, -1.2, 1.2];
-// Seconds of trying to walk without getting anywhere before squeezing past people, and before
-// looking for another way
-const STUCK_SQUEEZE = 1;
-const STUCK_REPLAN = 3;
+// Seconds of trying to walk without getting anywhere, like against a wall, before looking for
+// another way
+const STUCK_REPLAN = 1.5;
 // Within this distance of the next point they steer straight at it, since smoothed steering turns
 // too wide to reach it and they'd circle around it. Not getting any closer to it for NO_PROGRESS
 // seconds counts as reaching it when this close, or finding another way when not
@@ -104,7 +112,6 @@ const STEER_DIRECT_WITHIN = 1.5;
 const NO_PROGRESS = 2;
 // How often they check whether someone has since stopped in their way, and replan around them
 const ROUTE_CHECK_EVERY = 0.5;
-const SQUEEZE_AFTER = 1.5;
 const SQUEEZE_TIME = 1;
 const EXCUSE_EVERY = 4;
 const CATCH_REWARD = 3;
@@ -205,22 +212,23 @@ export function createCustomerController({
         return true;
     }
 
-    // The other customers standing still, as circles to keep clear of on the way somewhere
-    function standingAround(customer) {
+    // The other customers standing still or waiting, and `also` (someone in the way), as circles to
+    // keep clear of on the way somewhere. Anyone already that close is kept at least as far away
+    function standingAround(customer, also = null, from = customer?.npc.position) {
         if (!customer) return [];
         return customers
-            .filter((other) => other !== customer && !other.moving)
-            .map((other) => ({
-                x: other.npc.position.x,
-                z: other.npc.position.z,
-                radius: bodyRadius(customer) + bodyRadius(other),
-            }));
+            .filter((other) => other !== customer && (!other.moving || other.waitFor > 0 || other === also))
+            .map((other) => {
+                const { x, z } = other.npc.position;
+                const radius = bodyRadius(customer) + bodyRadius(other);
+                return { x, z, radius: Math.min(radius, Math.hypot(from.x - x, from.z - z) - 0.05) };
+            });
     }
 
     // Breadth-first search over a half-unit grid, around customers standing still when it's for a
-    // customer; null when the target can't be reached
-    function findRoute(from, target, customer = null) {
-        const standing = standingAround(customer);
+    // customer (and `avoid`, someone in the way); null when the target can't be reached
+    function findRoute(from, target, customer = null, avoid = null) {
+        const standing = standingAround(customer, avoid, from);
         const start = { x: from.x, z: from.z, parent: null };
         const queue = [start];
         const visited = new Set(["0,0"]);
@@ -359,8 +367,14 @@ export function createCustomerController({
             patience: 0,
             recheck: 0,
             hurried: false,
+            // Seconds they've been held up by someone in the way, how much longer they're waiting
+            // before trying again, and when they next look for a way around
             blocked: 0,
+            waitFor: 0,
+            rerouteIn: REROUTE_EVERY,
             squeezing: 0,
+            // Who came in first, who gets to squeeze past when two can't get past each other
+            order: spawned,
             excuseIn: 0,
             // Where they're turning to face, in radians around y
             heading: Math.PI,
@@ -436,13 +450,36 @@ export function createCustomerController({
         }
     }
 
-    // Carried items, bottom one between the hands and the rest on top of it
+    // An item's size and how far its bottom is below its origin, in the customer's space, measured
+    // once from its shapes in its own space, so whichever way it's turned doesn't matter
+    function carryShape(item) {
+        if (!item.userData.carryShape) {
+            item.updateMatrixWorld(true);
+            const toItem = item.matrixWorld.clone().invert();
+            const bounds = new THREE.Box3();
+            item.traverse((child) => {
+                if (!child.isMesh) return;
+                child.geometry.computeBoundingBox();
+                const relative = new THREE.Matrix4().multiplyMatrices(toItem, child.matrixWorld);
+                bounds.union(child.geometry.boundingBox.clone().applyMatrix4(relative));
+            });
+            const size = bounds.getSize(new THREE.Vector3()).multiply(item.scale);
+            item.userData.carryShape = { width: size.x, height: size.y, depth: size.z, bottom: bounds.min.y * item.scale.y };
+        }
+        return item.userData.carryShape;
+    }
+
+    // Carried items stacked up, biggest at the bottom, held between the hands by the middle of the
+    // bottom one, and far enough out not to stick into the customer
     function holdItems(customer) {
-        let y = HAND_HEIGHT;
-        for (const item of customer.items) {
-            if (item.parent !== customer.npc) continue;
-            const height = item.userData.size?.y ?? 1;
-            item.position.set(0, y - Math.min(height, 1) / 2, HAND_FORWARD);
+        const held = customer.items.filter((item) => item.parent === customer.npc);
+        if (!held.length) return;
+        held.sort((a, b) => carryShape(b).width * carryShape(b).depth - carryShape(a).width * carryShape(a).depth);
+        const forward = Math.max(HAND_FORWARD, ...held.map((item) => TORSO_FRONT + carryShape(item).depth / 2));
+        let y = HAND_HEIGHT - carryShape(held[0]).height / 2;
+        for (const item of held) {
+            const { height, bottom } = carryShape(item);
+            item.position.set(0, y - bottom, forward);
             item.rotation.set(0, 0, 0);
             y += height;
         }
@@ -715,6 +752,8 @@ export function createCustomerController({
 
         if (!customer.route.length && customer.moving) {
             customer.moving = false;
+            customer.blocked = 0;
+            customer.waitFor = 0;
             if (customer.facing) {
                 customer.heading = Math.atan2(customer.facing.x - npc.position.x, customer.facing.z - npc.position.z);
             }
@@ -744,11 +783,20 @@ export function createCustomerController({
         const remaining = distanceTo(next);
         customer.squeezing = Math.max(customer.squeezing - dt, 0);
         customer.excuseIn -= dt;
+        // Standing still, waiting for someone to get out of the way
+        if (customer.waitFor > 0) {
+            customer.waitFor -= dt;
+            customer.blocked += dt;
+            return { dx: 0, dz: 0 };
+        }
         recheckRoute(customer, dt);
         if (checkProgress(customer, next, remaining, dt)) return { dx: 0, dz: 0 };
 
         const radius = bodyRadius(customer);
-        const ignore = (body) => body.customer === customer || (customer.squeezing > 0 && !body.player);
+        // Out on the sidewalk, where they appear and disappear, they walk past each other
+        const outside = position.z > D + 1;
+        const ignore = (body) => body.customer === customer ||
+            ((customer.squeezing > 0 || outside) && !body.player);
         let dirX = (next.x - position.x) / remaining;
         let dirZ = (next.z - position.z) / remaining;
 
@@ -826,21 +874,65 @@ export function createCustomerController({
             if (blocker) continue;
 
             customer.blocked = 0;
+            customer.rerouteIn = REROUTE_EVERY;
+            // Carrying on in the direction they stepped, so stepping aside doesn't zig-zag
+            if (angle !== 0) {
+                customer.vx = dx / dt;
+                customer.vz = dz / dt;
+            }
             if (Math.hypot(dx, dz) > 0.0005) customer.heading = Math.atan2(dx, dz);
             return { dx, dz };
         }
 
-        // Stopped by someone in the way
+        blockedBy(customer, blocker, remaining);
+        return { dx: 0, dz: 0 };
+    }
+
+    // Stopped by someone in the way: waits a moment, then looks for a way around them, and stops
+    // where they are if they're nearly there. Only if none of that helps for a long while does the
+    // one who came in first squeeze past
+    function blockedBy(customer, blocker, remaining) {
         customer.vx = 0;
         customer.vz = 0;
-        customer.blocked += dt;
-        if (blocker.player && customer.blocked > 0.5 && customer.excuseIn <= 0) {
-            say(npc, "Excuse me!");
-            customer.excuseIn = EXCUSE_EVERY;
-        } else if (!blocker.player && customer.blocked > SQUEEZE_AFTER) {
-            customer.squeezing = SQUEEZE_TIME;
+        customer.waitFor = randomBetween(...WAIT_TIME);
+        customer.blocked += 0.001;
+        customer.rerouteIn -= customer.waitFor;
+
+        if (blocker.player) {
+            if (customer.blocked > 0.5 && customer.excuseIn <= 0) {
+                say(customer.npc, "Excuse me!");
+                customer.excuseIn = EXCUSE_EVERY;
+            }
+            return;
         }
-        return { dx: 0, dz: 0 };
+        if (customer.route.length === 1 && remaining < CLOSE_ENOUGH.distance && customer.blocked > CLOSE_ENOUGH.after) {
+            customer.route.shift();
+            return;
+        }
+        if (customer.rerouteIn <= 0) {
+            customer.rerouteIn = REROUTE_EVERY;
+            replan(customer, blocker.customer);
+        }
+        const other = blocker.customer;
+        if (customer.blocked > GIVE_UP_AFTER && (other.blocked === 0 || customer.order < other.order)) {
+            customer.squeezing = SQUEEZE_TIME;
+            customer.waitFor = 0;
+        }
+    }
+
+    // A new route to where they're going, around customers standing still and `avoid`. Those
+    // leaving go back to the inside of the door first, since outside isn't searched
+    function replan(customer, avoid = null) {
+        const { position } = customer.npc;
+        const target = customer.route.at(-1);
+        if (position.z > D) return;
+        if (target.z > D) {
+            const route = findRoute(position, LEAVE_INSIDE, customer, avoid);
+            if (route) customer.route = [...route, target];
+        } else {
+            const route = findRoute(position, target, customer, avoid);
+            if (route) customer.route = route;
+        }
     }
 
     // Whether they gave up on the point because they weren't getting any closer to it, like circling
@@ -881,14 +973,13 @@ export function createCustomerController({
     }
 
     // Trying to walk but not getting anywhere, like pinned against the counter while going around
-    // someone: squeezes past people after a moment, and finds a new way if that doesn't help
+    // someone: finds a new way after a moment
     function updateStuck(customer, intended, moved, dt) {
         if (intended < 0.0001 || moved > intended * 0.2) {
             customer.stuck = 0;
             return;
         }
         customer.stuck = (customer.stuck ?? 0) + dt;
-        if (customer.stuck > STUCK_SQUEEZE && customer.squeezing === 0) customer.squeezing = SQUEEZE_TIME;
         if (customer.stuck > STUCK_REPLAN && customer.route.length) {
             const target = customer.route.at(-1);
             const outside = target.z > D;

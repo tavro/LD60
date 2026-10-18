@@ -66,11 +66,22 @@ const items = createItemSystem({
         belt.handleDrop(item);
         tutorial.onDrop(item);
     },
-    onMopUse: (mop, hit) => printer.tryScrub(mop, hit) || messes.tryScrub(mop, hit),
+    onMopUse: useMop,
     onWorldUse: (hit) => shiftButton.use(hit),
     onUse: (hit) => delivery.use(hit) || customers.use(hit),
     onGive: (item) => customers.give(item),
 });
+// Cleans whatever's at or near where it's used. Used on the floor it always swishes, even with
+// nothing there, rather than being put down; it's put down by clicking anything else
+function useMop(mop, hit, floor) {
+    const spots = [hit, floor && { point: floor }].filter(Boolean);
+    const cleaned = spots.some((spot) => printer.tryScrub(spot) || messes.tryScrub(spot));
+    if (!cleaned && !floor) return false;
+    animations.tween(0.25, (t) => {
+        mop.rotation.z = Math.sin(t * Math.PI * 2) * 0.3;
+    });
+    return true;
+}
 const stock = createStockSystem({ spawn: models.spawn, addItem: items.addItem, slots: shelfSlots });
 const { printerLoaded, shopShelvesLoaded, counterLoaded, addExtraShelf, stockCapacity } = createFurniture({
     spawn: models.spawn,
@@ -79,22 +90,23 @@ const { printerLoaded, shopShelvesLoaded, counterLoaded, addExtraShelf, stockCap
 delivery = createDeliverySystem({
     scene, items, physics, placeBox: stock.placeBox, collides: collisions.collides, stockCapacity,
 });
+const npcSpeech = createNPCSpeech();
 printer = createPrinterSystem({
     scene,
+    speech: npcSpeech,
     items,
     collides: collisions.collides,
     tween: animations.tween,
     printerLoaded,
     retag: stock.retag,
 });
-const messes = createMesses({ scene, items, physics, tween: animations.tween });
+const messes = createMesses({ scene, items, physics });
 
 // Scatter paper after the furniture loads. The mop and cartridge already exist independently.
 models.ready().then(() => printer.initialize()).catch((error) => {
     console.warn("Could not scatter printer paper:", error);
 });
 
-const npcSpeech = createNPCSpeech();
 const register = createRegister(scene, counterLoaded);
 const belt = createBelt(scene, counterLoaded);
 const shift = createShift({ register, onEnd: endShift });
@@ -140,6 +152,8 @@ const controls = createControls({
 });
 
 let nextDay = null;
+// Whether the next day is another go at one that failed
+let retrying = false;
 let preparationError = "";
 let startWarning = "";
 let warningTime = 0;
@@ -148,9 +162,10 @@ preparationCard.id = "preparation-card";
 preparationCard.hidden = true;
 document.body.append(preparationCard);
 
-function prepareShift(day) {
+function prepareShift(day, retry = false) {
     if (nextDay !== null) return;
     nextDay = day;
+    retrying = retry;
     preparationError = "";
     startWarning = "";
     shiftButton.setActive(true);
@@ -271,13 +286,13 @@ function showShiftResult(result) {
         lines: [
             `Takings: $${takings} of $${target}`,
             `Walkouts: ${walkouts} of ${maxWalkouts}`,
-            success ? `Bank: $${shift.bank}` : failedBy,
+            success ? `Bank: $${shift.bank}` : `${failedBy} Day ${day} starts over.`,
             "Collect the next delivery at the front door during preparation.",
         ],
         upgrades,
-        button: success ? `Prepare day ${day + 1}` : "Prepare to try again",
+        button: success ? `Prepare day ${day + 1}` : `Retry day ${day}`,
         onContinue: () => {
-            prepareShift(success ? day + 1 : day);
+            prepareShift(success ? day + 1 : day, !success);
             controls.resume();
         },
     });
@@ -310,7 +325,7 @@ function animate(time) {
             warningTime = Math.max(0, warningTime - dt);
             const warning = warningTime > 0 ? `\n${startWarning}` : "";
             const status = preparationError || delivery.message;
-            const text = `PREPARING DAY ${nextDay}\n${status}${warning}\nClean the shop, then click the glowing red button at the counter to start.`;
+            const text = `${retrying ? "RETRYING" : "PREPARING"} DAY ${nextDay}\n${status}${warning}\nClean the shop, then click the glowing red button at the counter to start.`;
             if (preparationCard.textContent !== text) preparationCard.textContent = text;
         }
     }

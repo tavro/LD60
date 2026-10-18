@@ -2,7 +2,7 @@ import * as THREE from "three";
 
 // Pixel-art puddles: a few overlapping round blobs drawn as square pixels PIXEL wide on the floor,
 // redrawn as the puddle grows or shrinks so the pixels stay the same size. A darker rim, a few
-// lighter pixels for shine, and a little variation in between
+// lighter pixels, and a little variation in between. Matte, so the lights don't shine off them
 const PIXEL = 0.2;
 // Redrawn when the size has changed by this much
 const SIZE_STEP = 0.05;
@@ -32,7 +32,7 @@ export function createPixelPuddle({ color, blobs, maxSize }) {
         new THREE.MeshStandardMaterial({
             map: texture,
             alphaTest: 0.5,
-            roughness: 0.15,
+            roughness: 1,
             polygonOffset: true,
             polygonOffsetFactor: -1,
         }),
@@ -113,7 +113,7 @@ export function footprintMesh(color) {
         footprintMaterial = new THREE.MeshStandardMaterial({
             map: texture,
             alphaTest: 0.5,
-            roughness: 0.15,
+            roughness: 1,
             polygonOffset: true,
             polygonOffsetFactor: -1,
         });

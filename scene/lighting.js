@@ -19,6 +19,32 @@ const SHADOW_AREA = { width: 2 * W + 4, depth: 2 * D + 4 };
 const SHADOW_CHECK_EVERY = 0.5;
 let shadowRedrawEvery = 1 / 20;
 
+// Lights a material in square pixels the size of the shadow pixels: each point is lit as if it were
+// the middle of its pixel on the surface, so pools of light on walls and floors are blocky like the
+// shadows instead of smooth. For flat surfaces, since the pixels are laid out in world space
+export function pixelateLighting(material) {
+    const after = "vec3 geometryViewDir = ( isOrthographic ) ? vec3( 0, 0, 1 ) : normalize( vViewPosition );";
+    const size = SHADOW_PIXEL.toFixed(4);
+    material.onBeforeCompile = (shader) => {
+        shader.fragmentShader = shader.fragmentShader.replace(
+            "#include <lights_fragment_begin>",
+            THREE.ShaderChunk.lights_fragment_begin.replace(after, `${after}
+            {
+                mat3 toView = mat3( viewMatrix );
+                vec3 world = transpose( toView ) * ( geometryPosition - viewMatrix[ 3 ].xyz );
+                vec3 worldNormal = transpose( toView ) * geometryNormal;
+                vec3 snapped = ( floor( world / ${size} ) + 0.5 ) * ${size};
+                // Back onto the surface, so only the position along it is snapped
+                snapped += worldNormal * dot( world - snapped, worldNormal );
+                geometryPosition = toView * snapped + viewMatrix[ 3 ].xyz;
+                geometryViewDir = isOrthographic ? vec3( 0, 0, 1 ) : normalize( - geometryPosition );
+            }`),
+        );
+    };
+    material.customProgramCacheKey = () => "pixel-lighting";
+    return material;
+}
+
 export function createLighting(scene) {
     const fill = new THREE.HemisphereLight(FILL.sky, FILL.ground, FILL.intensity);
     scene.add(fill);

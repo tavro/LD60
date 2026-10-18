@@ -5,8 +5,10 @@ import { randomBetween, isPartOf } from "./utils.js";
 import { randomImage } from "./print-images.js";
 import { playSfx } from "./sfx.js";
 import { createPixelPuddle } from "./puddles.js";
+import { PIXEL_FONT, pixelCanvasTexture } from "./font.js";
+import { stockFor } from "./stock.js";
 
-export function createPrinterSystem({ scene, items, collides, tween, printerLoaded, retag }) {
+export function createPrinterSystem({ scene, items, collides, tween, printerLoaded, retag, speech }) {
     const { addItem, removeItem, firstHit } = items;
     const DOWN = new THREE.Vector3(0, -1, 0);
 
@@ -22,7 +24,11 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
     const SLOT_Y = 2.0;
     const SLOT_START_Z = -0.1;
     const SLOT_END_Z = 1.35;
-    const PRINTER_TOP = new THREE.Vector3(-0.4, 3.25, 0);
+    const PRINTER_TOP = new THREE.Vector3(-0.45, 3.25, 0.25);
+    // The ink display standing at the back of the raised left part of the top, behind where things
+    // are put, facing the front, and where the printer's speech bubbles come from
+    const DISPLAY_AT = new THREE.Vector3(-0.45, 3.25, -0.75);
+    const BUBBLE_AT = new THREE.Vector3(0, 4.2, 0.5);
     const DRIP_FROM = new THREE.Vector3(0.8, 2.0, 1.1);
     const PUDDLE_AT = new THREE.Vector3(0.8, 0.02, 1.6);
 
@@ -35,7 +41,7 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
     const MAX_PUDDLE = 3;
     const SCRUB_AMOUNT = 0.5;
     // How far past the puddle's edge the mop still reaches, and the size below which it's gone
-    const SCRUB_MARGIN = 1.2;
+    const SCRUB_MARGIN = 2;
     const CLEAN_BELOW = 0.3;
 
     // Dropped from above onto whatever is there, so it lands on top if something was left on the spot
@@ -87,7 +93,7 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
 
     const inkMaterial = new THREE.MeshStandardMaterial({
         color: 0x0b0b2a,
-        roughness: 0.1,
+        roughness: 1,
         polygonOffset: true,
         polygonOffsetFactor: -1,
     });
@@ -140,9 +146,72 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
         }
     }
 
+    // Ink display: a little screen with the ink level as a bar of pixels, flashing a warning when
+    // the cartridge is leaking or empty
+
+    const DISPLAY_PIXELS = [64, 24];
+    const displayCanvas = document.createElement("canvas");
+    [displayCanvas.width, displayCanvas.height] = DISPLAY_PIXELS;
+    const displayContext = displayCanvas.getContext("2d");
+    const displayTexture = pixelCanvasTexture(displayCanvas);
+    let displayShows = "";
+    let blink = 0;
+
+    function makeDisplay() {
+        const display = new THREE.Group();
+        const casing = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.5, 0.12).translate(0, 0.25, 0),
+            new THREE.MeshStandardMaterial({ color: 0x2a2a2a }));
+        // Lit up, so it can be read in the dark corner
+        const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.96, 0.36),
+            new THREE.MeshBasicMaterial({ map: displayTexture, toneMapped: false }));
+        screen.position.set(0, 0.25, 0.061);
+        display.add(casing, screen);
+        display.position.copy(DISPLAY_AT);
+        display.rotation.x = -0.25;
+        return display;
+    }
+
+    function drawDisplay(dt) {
+        blink = (blink + dt) % 1;
+        const empty = printer.ink < INK_PER_STICKER;
+        const flash = blink < 0.5;
+        const text = empty ? (flash ? "NO INK" : "") : printer.leaking && flash ? "LEAK!" : "INK";
+        const bars = Math.ceil(printer.ink * 10);
+        const shows = `${text}|${bars}`;
+        if (shows === displayShows) return;
+        displayShows = shows;
+
+        const [width, height] = DISPLAY_PIXELS;
+        const ctx = displayContext;
+        ctx.fillStyle = empty ? "#3a0c0c" : "#0f2a12";
+        ctx.fillRect(0, 0, width, height);
+        ctx.font = `8px ${PIXEL_FONT}`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "top";
+        ctx.fillStyle = empty || printer.leaking ? "#ff5a4a" : "#8cf27a";
+        ctx.fillText(text, width / 2, 3);
+        // Ten bars, lit for the ink that's left
+        for (let i = 0; i < 10; i++) {
+            ctx.fillStyle = i < bars ? (bars <= 2 ? "#ff5a4a" : "#8cf27a") : "#26402a";
+            ctx.fillRect(4 + i * 6, 14, 4, 6);
+        }
+        displayTexture.needsUpdate = true;
+    }
+
+    // Says something in a speech bubble over the printer
+    const bubbleAnchor = new THREE.Object3D();
+    scene.add(bubbleAnchor);
+
+    function say(text) {
+        speech.say(bubbleAnchor, text, 3, 0);
+    }
+
     printerLoaded.then((group) => {
         printer.group = group;
         puddle.position.copy(group.localToWorld(PUDDLE_AT.clone()));
+        group.add(makeDisplay());
+        bubbleAnchor.position.copy(group.localToWorld(BUBBLE_AT.clone()));
+        drawDisplay(0);
     });
 
     function initialize() {
@@ -167,6 +236,7 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
         const inked = printer.ink >= INK_PER_PRINT;
         if (inked) printer.ink -= INK_PER_PRINT;
 
+        if (!inked) say("NO INK! Blank page");
         const image = inked ? await randomImage() : null;
 
         //printer sound
@@ -204,13 +274,7 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
     // sticker with the right price, when there's ink for it, and stay on top
     function feedPrinter(item) {
         const kind = item.userData.kind;
-        if (kind === "box" && printer.ink >= INK_PER_STICKER) {
-            item.position.copy(printer.group.localToWorld(PRINTER_TOP.clone()));
-            printer.ink -= INK_PER_STICKER;
-            retag(item);
-            stats.retags++;
-            tween(0.3, (t) => item.scale.setScalar(1 + Math.sin(t * Math.PI) * 0.15));
-        }
+        if (kind === "box") retagBox(item);
         if (kind === "paper" || kind === "cartridge") {
             item.position.copy(printer.group.localToWorld(PRINTER_TOP.clone()));
         }
@@ -220,10 +284,32 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
             printJobs = printJobs.then(printPage);
         } else if (kind === "cartridge") {
             swallow(item);
-            printer.ink = 1;
-            printer.leaking = false;
-            printer.leakIn = randomBetween(...LEAK_DELAY);
+            refill();
+            say("Ink full!");
         }
+    }
+
+    // A new sticker with the right price, if it needs one and there's ink for it. It stays on top
+    function retagBox(item) {
+        const { price } = stockFor(item.userData.label);
+        if (item.userData.tagPrice === price) {
+            say(`Tag OK: $${price}`);
+            return;
+        }
+        if (printer.ink < INK_PER_STICKER) {
+            say("NO INK! Can't print tag");
+            playSfx("electricError");
+            return;
+        }
+        // Swelling a little as the new sticker goes on
+        const scale = item.scale.x;
+        item.position.copy(printer.group.localToWorld(PRINTER_TOP.clone()));
+        printer.ink -= INK_PER_STICKER;
+        retag(item);
+        stats.retags++;
+        say(`Relabeled: $${price}`);
+        playSfx("electricSuccess");
+        tween(0.3, (t) => item.scale.setScalar(scale * (1 + Math.sin(t * Math.PI) * 0.15)));
     }
 
     function drip() {
@@ -239,6 +325,7 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
 
     function updatePrinter(dt) {
         if (!printer.group) return;
+        drawDisplay(dt);
 
         if (!printer.leaking) {
             printer.leakIn -= dt;
@@ -256,12 +343,9 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
 
     }
 
-    function scrub(mop) {
+    function scrub() {
         const size = puddleSize - SCRUB_AMOUNT;
         setPuddleSize(size < CLEAN_BELOW ? 0 : size);
-        tween(0.25, (t) => {
-            mop.rotation.z = Math.sin(t * Math.PI * 2) * 0.3;
-        });
     }
 
     function handleDrop(item, hit) {
@@ -269,11 +353,11 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
     }
 
     // Anywhere on or near the puddle; its blobs reach about 1.5 times its size from the middle
-    function tryScrub(mop, hit) {
+    function tryScrub(hit) {
         if (!hit || !puddle.visible) return false;
         const distance = Math.hypot(hit.point.x - puddle.position.x, hit.point.z - puddle.position.z);
         if (distance > puddleSize * 1.5 + SCRUB_MARGIN) return false;
-        scrub(mop);
+        scrub();
         return true;
     }
 

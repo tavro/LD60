@@ -5,6 +5,10 @@ import { STOCK } from "./stock.js";
 
 const MAX_PER_PRODUCT = 4;
 const PRODUCT_RADIUS = 0.65;
+// Products are set out on the storage floor this far apart, nearest the carton first. If there's
+// ever not enough room, the rest are dropped on top of them from this much higher per layer
+const SPACING = 1.3;
+const LAYER_HEIGHT = 1.2;
 
 // Counts loose and carried stock as well as shelved stock, so deliveries cannot overfill the shop.
 export function deliveryContents(capacity, items) {
@@ -70,10 +74,9 @@ export function createDeliverySystem({ scene, items, physics, placeBox, collides
         const occupied = items.list().map((item) =>
             new THREE.Box3().setFromObject(item).expandByScalar(PRODUCT_RADIUS));
         const positions = [];
-        for (let x = -W + 1.5; x < PARTITION_X - 1; x += 1.4) {
-            for (let z = -D + 1.5; z < D - 1; z += 1.4) {
+        for (let x = -W + 1.5; x < PARTITION_X - 1; x += SPACING) {
+            for (let z = -D + 1.5; z < D - 1; z += SPACING) {
                 const point = new THREE.Vector3(x, 0, z);
-                if (Math.hypot(x - origin.x, z - origin.z) > 4) continue;
                 if (collides(x, z, PRODUCT_RADIUS)) continue;
                 const center = point.clone().setY(0.5);
                 if (occupied.some((box) => box.containsPoint(center))) continue;
@@ -83,30 +86,28 @@ export function createDeliverySystem({ scene, items, physics, placeBox, collides
         return positions.sort((a, b) => a.distanceToSquared(origin) - b.distanceToSquared(origin));
     }
 
+    // Everything in the carton, all at once
     async function unpack(positions) {
         unpacking = true;
         message = "Unpacking delivery…";
         physics.release(carton);
         try {
-            for (const position of positions.slice(0, contents.length)) {
+            for (let i = 0; contents.length; i++) {
+                const position = positions[i % positions.length].clone();
+                position.y = Math.floor(i / positions.length) * LAYER_HEIGHT;
                 const item = await placeBox({ position, rotation: 0, stock: contents[0] });
                 contents.shift();
                 physics.addLoose(item);
             }
-            if (!contents.length) {
-                items.removeItem(carton);
-                carton.removeFromParent();
-                carton.traverse((child) => {
-                    child.geometry?.dispose();
-                    child.material?.map?.dispose();
-                    child.material?.dispose();
-                });
-                carton = null;
-                message = "Delivery unpacked. Pick up the products to price or shelve them.";
-            } else {
-                message = `${contents.length} products left in the carton. Clear floor space nearby, then click it again.`;
-                physics.addLoose(carton);
-            }
+            items.removeItem(carton);
+            carton.removeFromParent();
+            carton.traverse((child) => {
+                child.geometry?.dispose();
+                child.material?.map?.dispose();
+                child.material?.dispose();
+            });
+            carton = null;
+            message = "Delivery unpacked. Pick up the products to price or shelve them.";
         } catch (error) {
             message = "Could not unpack the delivery. Click the carton to try again.";
             physics.addLoose(carton);
@@ -125,7 +126,7 @@ export function createDeliverySystem({ scene, items, physics, placeBox, collides
         if (position.x >= PARTITION_X - 1) return false;
         const positions = freePositions();
         if (!positions.length) {
-            message = "No clear floor space nearby. Click to carry the carton to a clearer spot in storage.";
+            message = "No clear floor space in storage. Shelve some products, then click the carton again.";
             return false;
         }
         void unpack(positions);

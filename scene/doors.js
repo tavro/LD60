@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { settings } from "../settings.js";
 import { wallMaterial, tileWall } from "./walls.js";
+import { pixelateLighting } from "./lighting.js";
 import { WALL_HEIGHT, WALL_THICKNESS, D, PARTITION_X, STORAGE_DOOR, FRONT_DOOR } from "./layout.js";
 
 // Automatic sliding doors: a solid one into the storage room that opens for the player, and glass
@@ -46,7 +47,7 @@ export function createDoors(scene, { surfaces, setSolid, addBarrier }) {
     {
         const { z, width } = STORAGE_DOOR;
         const panelWidth = width - WALL_THICKNESS + 0.2;
-        const material = new THREE.MeshStandardMaterial({ color: 0x7d8a96 });
+        const material = pixelateLighting(new THREE.MeshStandardMaterial({ color: 0x7d8a96 }));
         const geometry = new THREE.BoxGeometry(0.2, DOOR_HEIGHT, panelWidth);
         const closed = new THREE.Vector3(PARTITION_X, DOOR_HEIGHT / 2, z);
         addLintel(PARTITION_X, z, WALL_THICKNESS, width);
@@ -69,11 +70,11 @@ export function createDoors(scene, { surfaces, setSolid, addBarrier }) {
         const { x, width } = FRONT_DOOR;
         const panelWidth = (width - WALL_THICKNESS) / 2 + 0.1;
         const z = D + WALL_THICKNESS / 2 + 0.1;
-        const material = new THREE.MeshStandardMaterial({
+        const material = pixelateLighting(new THREE.MeshStandardMaterial({
             color: 0x9fc6d6,
             transparent: true,
             opacity: 0.35,
-        });
+        }));
         const geometry = new THREE.BoxGeometry(panelWidth, DOOR_HEIGHT, 0.1);
         const frame = new THREE.LineSegments(
             new THREE.EdgesGeometry(geometry),

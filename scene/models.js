@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { pixelateLighting } from "./lighting.js";
 
 // Models exported without a material get the glTF default, which is fully metallic and so renders
 // black without reflections to show. Those get a plain matte one instead
@@ -8,6 +9,13 @@ function giveMaterial(object) {
     const material = object.material;
     if (material.name || material.map || material.metalness < 1) return;
     object.material = new THREE.MeshStandardMaterial({ color: material.color, roughness: 0.8 });
+}
+
+// Furniture is lit in pixels like the walls. Items copy their materials when spawned, which leaves
+// that out, so things that move around don't have pixels sliding across them
+function pixelate(object) {
+    if (!object.isMesh) return;
+    for (const material of [object.material].flat()) pixelateLighting(material);
 }
 
 export function createModelSpawner(scene, { addSolid }) {
@@ -31,6 +39,7 @@ export function createModelSpawner(scene, { addSolid }) {
         const model = (await models[name]).scene.clone();
         model.scale.multiplyScalar(scale);
         model.traverse(giveMaterial);
+        model.traverse(pixelate);
 
         const box = new THREE.Box3().setFromObject(model);
         const center = box.getCenter(new THREE.Vector3());

@@ -8,6 +8,8 @@ export function createItemSystem({
     onWorldUse = () => false,
 }) {
     const REACH = 6;
+    // The mop reaches along the floor further than hands do
+    const MOP_REACH = 10;
     const DROP_DISTANCE = 1.5;
     // Items this close to the crosshair (in radians) count as aimed at, so they're easier to grab
     const AIM_ANGLE = 0.15;
@@ -90,6 +92,55 @@ export function createItemSystem({
     ghost.userData.shadow = "none";
     scene.add(ghost);
 
+    // A see-through copy of the held item inside the outline, turned the way it will be put down,
+    // so it shows which way it'll face. Made on pickup, sharing the item's shapes and textures
+    const preview = new THREE.Group();
+    preview.name = "drop-preview";
+    preview.visible = false;
+    preview.userData.shadow = "none";
+    scene.add(preview);
+    // The random turn the held item gets if it goes in a shelf, picked ahead so the preview shows it
+    let twist = 0;
+
+    function buildPreview(item) {
+        clearPreview();
+        // Relative to the item's position only, keeping its scale (it's unrotated while measured)
+        const inverse = new THREE.Matrix4().makeTranslation(item.getWorldPosition(new THREE.Vector3()).negate());
+        item.traverse((child) => {
+            if (!child.isMesh) return;
+            const material = materialsOf(child).map((original) => new THREE.MeshBasicMaterial({
+                map: original.map ?? null,
+                color: original.map ? 0xffffff : original.color,
+                transparent: true,
+                opacity: 0.45,
+                depthWrite: false,
+                toneMapped: false,
+            }));
+            const copy = new THREE.Mesh(child.geometry, Array.isArray(child.material) ? material : material[0]);
+            copy.matrixAutoUpdate = false;
+            copy.matrix.multiplyMatrices(inverse, child.matrixWorld);
+            copy.userData.colors = material.map((m) => m.color.clone());
+            preview.add(copy);
+        });
+    }
+
+    function clearPreview() {
+        for (const copy of [...preview.children]) {
+            for (const material of materialsOf(copy)) material.dispose();
+            copy.removeFromParent();
+        }
+    }
+
+    // Tinted red where the item can't go
+    function tintPreview(blocked) {
+        for (const copy of preview.children) {
+            materialsOf(copy).forEach((material, i) => {
+                if (blocked) material.color.setHex(0xff3333);
+                else material.color.copy(copy.userData.colors[i]);
+            });
+        }
+    }
+
     function itemOf(object) {
         while (object && !object.userData.isItem) object = object.parent;
         return object;
@@ -167,6 +218,8 @@ export function createItemSystem({
         item.rotation.set(0, 0, 0);
         item.updateMatrixWorld(true);
         heldSize = new THREE.Box3().setFromObject(item).getSize(new THREE.Vector3());
+        if (item.userData.kind !== "mop") buildPreview(item);
+        twist = (Math.random() * 2 - 1) * SLOT_TWIST;
 
         const hold = HOLD[item.userData.kind] ?? HOLD.default;
         drawOnTop(item, true);
@@ -214,6 +267,15 @@ export function createItemSystem({
             point.z += (player.z - point.z) * 0.15;
         }
         return point;
+    }
+
+    // Where the crosshair meets the floor within MOP_REACH, unless something else is in the way
+    function floorPoint(hit) {
+        if (hit && !hit.object.userData.isFloor) return null;
+        const { origin, direction } = raycaster.ray;
+        if (direction.y > -0.05) return null;
+        const distance = -origin.y / direction.y;
+        return distance <= MOP_REACH ? origin.clone().addScaledVector(direction, distance) : null;
     }
 
     // How the held item gets put down: thrown when aimed at the floor or at nothing, put gently on
@@ -273,6 +335,7 @@ export function createItemSystem({
         const item = held;
         held = null;
         drawOnTop(item, false);
+        clearPreview();
 
         if (style === "throw") {
             // From a little in front of the player, but never inside a wall or door they're up
@@ -295,8 +358,7 @@ export function createItemSystem({
         if (onFloor) clearOfWalls(point);
         scene.add(item);
         item.position.copy(point);
-        const twist = slot ? (Math.random() * 2 - 1) * SLOT_TWIST : 0;
-        item.rotation.set(0, rotation + twist, 0);
+        item.rotation.set(0, rotation + (slot ? twist : 0), 0);
         // Anything ending up on the floor or a pile is loose, so it can topple and be knocked over
         if (style === "pile" || onFloor) physics.addLoose(item);
 
@@ -308,7 +370,7 @@ export function createItemSystem({
         if (onWorldUse(lookHit())) return;
         if (held?.userData.kind === "mop") {
             const hit = lookHit();
-            if (onMopUse(held, hit)) return;
+            if (onMopUse(held, hit, floorPoint(hit))) return;
         }
 
         // Handing the held item to someone, like a print to the customer who ordered it. They
@@ -318,6 +380,7 @@ export function createItemSystem({
             held.removeFromParent();
             removeItem(held);
             held = null;
+            clearPreview();
         }
         if (given) return;
 
@@ -370,14 +433,20 @@ export function createItemSystem({
 
     function updateGhost() {
         ghost.visible = held !== null && held.userData.kind !== "mop" && dropStyle(lookHit()) !== "throw";
+        preview.visible = ghost.visible;
         if (!ghost.visible) return;
         const landed = landing();
-        const { point, rotation = player.yaw } = landed;
-        ghost.material.color.setHex(blockedRestock(landed) ? 0xff3333 : 0xffffff);
+        const { point, rotation = player.yaw, slot } = landed;
+        const blocked = blockedRestock(landed);
+        ghost.material.color.setHex(blocked ? 0xff3333 : 0xffffff);
+        tintPreview(blocked);
+        const turn = rotation + (slot ? twist : 0);
         // A hair bigger and higher than the item, so it doesn't flicker against what it sits on
         ghost.position.copy(point).setY(point.y + 0.01);
-        ghost.rotation.set(0, rotation, 0);
+        ghost.rotation.set(0, turn, 0);
         ghost.scale.copy(heldSize).multiplyScalar(1.03);
+        preview.position.copy(point).setY(point.y + 0.005);
+        preview.rotation.set(0, turn, 0);
     }
 
     // Swaying with the player's steps

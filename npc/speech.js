@@ -60,7 +60,8 @@ export function createNPCSpeech() {
         return canvas;
     }
 
-    function say(npc, text, duration = 4) {
+    // Over an NPC's head, or `height` above anything else
+    function say(npc, text, duration = 4, height = 5.5) {
         clear(npc);
         const canvas = draw(text);
         // Kept out of the tone mapping, so it stays crisp white
@@ -69,7 +70,7 @@ export function createNPCSpeech() {
             depthTest: false,
             toneMapped: false,
         }));
-        sprite.position.set(0, 5.5, 0);
+        sprite.position.set(0, height, 0);
         sprite.scale.set(canvas.width * PIXEL_SIZE, canvas.height * PIXEL_SIZE, 1);
         sprite.renderOrder = 10;
         npc.add(sprite);

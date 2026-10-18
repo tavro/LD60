@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { wallMaterial, tileWall } from "./walls.js";
+import { pixelateLighting } from "./lighting.js";
 import {
     ROOM_WIDTH, ROOM_DEPTH, WALL_HEIGHT, WALL_THICKNESS, W, D, PARTITION_X, STORAGE_DOOR, FRONT_DOOR,
     LIGHT_PANELS,
@@ -8,7 +9,7 @@ import {
 export function createEnvironment(scene, { surfaces, addSolid }) {
     const floor = new THREE.Mesh(
         new THREE.PlaneGeometry(ROOM_WIDTH, ROOM_DEPTH),
-        new THREE.MeshStandardMaterial({ color: 0x777777 }),
+        pixelateLighting(new THREE.MeshStandardMaterial({ color: 0x777777 })),
     );
     floor.rotation.x = -Math.PI / 2;
     floor.userData.isFloor = true;

@@ -7,13 +7,13 @@ import { createPixelPuddle, footprintMesh } from "./puddles.js";
 // faster. The mop cleans spills and footprints; boxes have to be put back
 const FOOTPRINT_STEPS = 14;
 const STRIDE = 1.3;
-const SCRUB_RADIUS = 1.5;
+const SCRUB_RADIUS = 2;
 const SCRUB_AMOUNT = 0.5;
 const CLEAN_BELOW = 0.3;
 // Footprints count as one mess per this many
 const FOOTPRINTS_PER_MESS = 4;
 
-export function createMesses({ scene, items, physics, tween }) {
+export function createMesses({ scene, items, physics }) {
     const spills = [];
     const footprints = [];
 
@@ -102,7 +102,7 @@ export function createMesses({ scene, items, physics, tween }) {
     }
 
     // Called with what the mop was used on; cleans footprints around it and shrinks a spill there
-    function tryScrub(mop, hit) {
+    function tryScrub(hit) {
         if (!hit) return false;
         const near = (object, radius) =>
             Math.hypot(hit.point.x - object.position.x, hit.point.z - object.position.z) < radius;
@@ -117,11 +117,7 @@ export function createMesses({ scene, items, physics, tween }) {
             else spill.userData.puddle.setSize(spill.userData.size);
         }
 
-        if (!scrubbed.length && !spill) return false;
-        tween(0.25, (t) => {
-            mop.rotation.z = Math.sin(t * Math.PI * 2) * 0.3;
-        });
-        return true;
+        return scrubbed.length > 0 || spill !== undefined;
     }
 
     return { addSpill, update, count, breakdown, tryScrub, spillCount: () => spills.length };
