@@ -3,7 +3,7 @@ import { W, D, INNER } from "../scene/layout.js";
 import { randomBetween, isPartOf } from "./utils.js";
 import { randomImage } from "./print-images.js";
 
-export function createPrinterSystem({ scene, items, collides, tween, printerLoaded, hud }) {
+export function createPrinterSystem({ scene, items, collides, tween, printerLoaded }) {
     const { addItem, removeItem, firstHit } = items;
     const DOWN = new THREE.Vector3(0, -1, 0);
 
@@ -20,10 +20,10 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
     const PUDDLE_AT = new THREE.Vector3(0.8, 0.02, 1.6);
 
     const INK_PER_PRINT = 0.1;
-    const LEAK_RATE = 0.02;
-    const LEAK_DELAY = [20, 45];
+    const LEAK_RATE = 0.008;
+    const LEAK_DELAY = [90, 150];
     const DRIP_INTERVAL = 0.3;
-    const PUDDLE_GROWTH = 0.08;
+    const PUDDLE_GROWTH = 0.03;
     const MAX_PUDDLE = 3;
     const SCRUB_AMOUNT = 0.5;
 
@@ -202,11 +202,6 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
             }
         }
 
-        const status = `Printer ink ${Math.round(printer.ink * 100)}%${printer.leaking ? " — leaking!" : ""}`;
-        if (hud.textContent !== status) {
-            hud.textContent = status;
-            hud.classList.toggle("alert", printer.leaking);
-        }
     }
 
     function scrub(mop) {

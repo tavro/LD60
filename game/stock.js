@@ -1,5 +1,13 @@
 import * as THREE from "three";
 
+// The items that get restocked, each with a color shared by its box stickers and shelf signs
+export const STOCK = [
+    { label: "Item 1", color: "#c8322a" },
+    { label: "Item 2", color: "#2a6fc8" },
+    { label: "Item 3", color: "#2e9a48" },
+    { label: "Item 4", color: "#e09a12" },
+];
+
 export function createStockSystem({ spawn, addItem }) {
     const SHELF_LEVELS = [0.1, 1.6, 3.1, 4.6];
     const SHELF_COLUMNS = [-1.2, 0, 1.2];
@@ -23,28 +31,45 @@ export function createStockSystem({ spawn, addItem }) {
     const LABEL_GEOMETRY = new THREE.PlaneGeometry(0.9, 0.34);
     const labelTextures = {};
 
-    function labelTexture(text) {
-        if (!labelTextures[text]) {
+    function labelTexture({ label, color }) {
+        if (!labelTextures[label]) {
             const canvas = document.createElement("canvas");
-            canvas.width = 256;
-            canvas.height = 96;
+            canvas.width = 512;
+            canvas.height = 192;
             const ctx = canvas.getContext("2d");
             ctx.fillStyle = "#f4f4ef";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.strokeStyle = "#222";
-            ctx.lineWidth = 6;
-            ctx.strokeRect(3, 3, canvas.width - 6, canvas.height - 6);
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 24;
+            ctx.strokeRect(12, 12, canvas.width - 24, canvas.height - 24);
             ctx.fillStyle = "#222";
-            ctx.font = "bold 52px sans-serif";
+            ctx.font = "bold 104px sans-serif";
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
-            ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+            ctx.fillText(label, canvas.width / 2, canvas.height / 2);
 
             const texture = new THREE.CanvasTexture(canvas);
             texture.colorSpace = THREE.SRGBColorSpace;
-            labelTextures[text] = texture;
+            labelTextures[label] = texture;
         }
-        return labelTextures[text];
+        return labelTextures[label];
+    }
+
+    // Sign on top of a shelf, at the front of its open side, saying which item belongs there
+    const SIGN_SIZE = [2.4, 0.9, 0.1];
+
+    async function spawnShelf(options, stock) {
+        const shelf = await spawn("shelf", options);
+        shelf.userData.stock = stock.label;
+
+        const back = new THREE.MeshStandardMaterial({ color: 0x222222 });
+        const front = new THREE.MeshStandardMaterial({ map: labelTexture(stock) });
+        // BoxGeometry faces are +x, -x, +y, -y, +z, -z; the label goes on the front
+        const sign = new THREE.Mesh(new THREE.BoxGeometry(...SIGN_SIZE), [back, back, back, back, front, back]);
+        const { y: height, z: depth } = shelf.userData.size;
+        sign.position.set(0, height + SIGN_SIZE[1] / 2, depth / 2 - SIGN_SIZE[2]);
+        shelf.add(sign);
+        return shelf;
     }
 
     async function restock(slot) {
@@ -59,14 +84,14 @@ export function createStockSystem({ spawn, addItem }) {
 
         const label = new THREE.Mesh(
             LABEL_GEOMETRY,
-            new THREE.MeshStandardMaterial({ map: labelTexture(slot.label) }),
+            new THREE.MeshStandardMaterial({ map: labelTexture(slot.stock) }),
         );
         label.position.set(0, 0.5, 0.505);
         item.add(label);
-        item.userData.label = slot.label;
+        item.userData.label = slot.stock.label;
 
         addItem(item, "box", () => restock(slot));
     }
 
-    return { shelfSlots, restock };
+    return { shelfSlots, restock, spawnShelf };
 }

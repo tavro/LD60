@@ -9,7 +9,8 @@ export function createControls({ renderer, player, interact, onPause = () => {} 
 
     let playing = false;
 
-    document.querySelector("#play").addEventListener("click", () => {
+    document.querySelector("#play").addEventListener("click", (event) => {
+        event.currentTarget.textContent = "▶ Back to work";
         hideMenu();
         playing = true;
         renderer.domElement.requestPointerLock();

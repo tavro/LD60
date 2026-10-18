@@ -43,7 +43,6 @@ printer = createPrinterSystem({
     collides: collisions.collides,
     tween: animations.tween,
     printerLoaded,
-    hud: document.getElementById("hud"),
 });
 
 // Place loose items and NPCs after the furniture and initial stock have loaded.

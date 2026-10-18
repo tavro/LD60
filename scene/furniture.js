@@ -1,11 +1,12 @@
 import { W, INNER, WALL_THICKNESS } from "./layout.js";
+import { STOCK } from "../game/stock.js";
 
 // Shelves are open on local +Z; rotate that side towards the aisle.
 const FACE_UP = Math.PI;
 const FACE_LEFT = -Math.PI / 2;
 const FACE_RIGHT = Math.PI / 2;
 
-export function createFurniture({ spawn, shelfSlots, restock }) {
+export function createFurniture({ spawn, shelfSlots, restock, spawnShelf }) {
     const PRINTER = { x: -12, z: -INNER + 1.2 };
     const printerLoaded = spawn("printer", PRINTER);
 
@@ -16,22 +17,23 @@ export function createFurniture({ spawn, shelfSlots, restock }) {
         ...[-16, -12, -8].map((x) => ({ x, z: INNER - 1, rotation: FACE_UP })),
     ];
     RESTOCK_SHELVES.forEach((shelf, i) => {
-        spawn("shelf", shelf);
-        for (const slot of shelfSlots(shelf)) restock({ ...slot, label: `Item ${i + 1}` });
+        spawnShelf(shelf, STOCK[i]);
+        for (const slot of shelfSlots(shelf)) restock({ ...slot, stock: STOCK[i] });
     });
 
-    // Double-sided shelf island in the middle
+    // Double-sided shelf island in the middle, where each row holds one item on both sides, from
+    // Item 1 at the top
     let firstCustomerShelfLoaded;
-    for (const z of [-6, -2, 2, 6]) {
-        const shelfLoaded = spawn("shelf", { x: 3, z, rotation: FACE_LEFT });
+    [-6, -2, 2, 6].forEach((z, i) => {
+        const shelfLoaded = spawnShelf({ x: 3, z, rotation: FACE_LEFT }, STOCK[i]);
         firstCustomerShelfLoaded ??= shelfLoaded;
-        spawn("shelf", { x: 5, z, rotation: FACE_RIGHT });
-    }
+        spawnShelf({ x: 5, z, rotation: FACE_RIGHT }, STOCK[i]);
+    });
 
-    // Shelf along the right wall
-    for (const z of [-9, -5]) {
-        spawn("shelf", { x: W - WALL_THICKNESS / 2 - 1, z, rotation: FACE_LEFT });
-    }
+    // Shelf along the right wall, for Item 1 and 2 again
+    [-9, -5].forEach((z, i) => {
+        spawnShelf({ x: W - WALL_THICKNESS / 2 - 1, z, rotation: FACE_LEFT }, STOCK[i]);
+    });
 
     // Desk in the bottom right corner: counter along the room side, with two legs reaching towards the
     // right wall and a gap between them to stand in. Leaves a walkway to the walls behind it
