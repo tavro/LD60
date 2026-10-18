@@ -1,5 +1,6 @@
 import menuHtml from "./menu.html?raw";
 import { settings } from "../settings.js";
+import { playSfx } from "../game/sfx.js";
 import "./menu.css";
 
 document.body.insertAdjacentHTML("beforeend", menuHtml);
@@ -41,6 +42,7 @@ export function showShiftPanel({ title, lines, upgrades = [], button, onContinue
         option.append(description);
         option.disabled = !upgrade.available;
         option.addEventListener("click", upgrade.onBuy);
+		option.addEventListener("click", () => playSfx("click"));
         return option;
     }));
 
@@ -61,11 +63,13 @@ brightness.value = settings.brightness;
 document.querySelector("#settings").addEventListener("click", () => {
   mainPanel.hidden = true;
   settingsPanel.hidden = false;
+  playSfx("click");
 });
 
 document.querySelector("#settings-back").addEventListener("click", () => {
   settingsPanel.hidden = true;
   mainPanel.hidden = false;
+  playSfx("click");
 });
 
 volume.addEventListener("input", () => {

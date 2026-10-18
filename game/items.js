@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { playSfx } from "./sfx.js";
 
 export function createItemSystem({ scene, camera, player, surfaces, slots, getExtraTargets, onDrop, onMopUse, onUse, onGive }) {
     const REACH = 6;
@@ -114,6 +115,11 @@ export function createItemSystem({ scene, camera, player, surfaces, slots, getEx
     }
 
     function pickUp(item) {
+		if (item.userData.kind === "paper" || item.userData.kind === "print") {
+			playSfx("paper");
+		} else {
+			playSfx("pickup");
+		}
         setHighlight(item, false);
         target = null;
 
@@ -179,6 +185,11 @@ export function createItemSystem({ scene, camera, player, surfaces, slots, getEx
     }
 
     function drop() {
+		if (held.userData.kind === "paper" || held.userData.kind === "print") {
+			playSfx("paper");
+		} else {
+			playSfx("drop");
+		}
         const aimed = lookHit();
         const { point, rotation = player.yaw, slot } = landing();
         const item = held;

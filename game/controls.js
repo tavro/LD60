@@ -1,4 +1,5 @@
 import { showMenu, hideMenu } from "../menu/menu.js";
+import { playSfx } from "./sfx.js";
 
 export function createControls({ renderer, player, interact, onPlay = () => {}, onPause = () => {} }) {
     const { keys, moveKeys: MOVE_KEYS } = player;
@@ -12,6 +13,7 @@ export function createControls({ renderer, player, interact, onPlay = () => {}, 
     let stopped = false;
 
     function resume() {
+		playSfx("click");
         stopped = false;
         hideMenu();
         playing = true;

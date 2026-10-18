@@ -8,6 +8,7 @@ const SFX = {
     click: "sfx/ld60_sfx_menu_click.mp3",
     hover: "sfx/ld60_sfx_menu_on_hover.mp3",
     pickup: "sfx/ld60_sfx_pickup.mp3",
+    drop: "sfx/ld60_sfx_drop.mp3",
     paper: [
         "sfx/ld60_sfx_paper_1.mp3",
         "sfx/ld60_sfx_paper_2.mp3",
@@ -42,7 +43,7 @@ for (const event of ["keydown", "click"]) {
     window.addEventListener(event, () => audio.resume());
 }
 
-export function play(name) {
+export function playSfx(name) {
     const variants = buffers[name];
     // Skip instead of queueing, so sounds triggered before the first click don't all burst out at once
     if (!variants || audio.state !== "running") return;
