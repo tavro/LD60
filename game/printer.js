@@ -40,6 +40,12 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
     let printJobs = Promise.resolve();
     let dripTimer = 0;
 
+    //printer sound effect
+    const printerSound = new Audio("sound_effects/printer.ogg");
+    printerSound.type = 'audio/ogg';
+    printerSound.preload = "auto";
+    printerSound.volume = 0.6;
+
     function makePaper(image = null) {
         const geometry = new THREE.BoxGeometry(...PAPER_SIZE).translate(0, PAPER_SIZE[1] / 2, 0);
         const blank = () => new THREE.MeshStandardMaterial({ color: 0xf4f4ef });
@@ -154,6 +160,12 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
         if (inked) printer.ink -= INK_PER_PRINT;
 
         const image = inked ? await randomImage() : null;
+
+        //printer sound
+        if (inked) {
+            printerSound.currentTime = 0;
+            printerSound.play().catch((err) => console.warn("Printer sound failed to play:", err));
+        }
 
         const page = makePaper(image);
         page.position.set(0, SLOT_Y, SLOT_START_Z);

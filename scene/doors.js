@@ -11,6 +11,17 @@ export function createDoors(scene, { surfaces, setSolid, addBarrier }) {
     const wallMaterial = new THREE.MeshStandardMaterial({ color: 0xbbbbaa });
     const doors = [];
 
+    function doorSounds(name) {
+        const sounds = {};
+        for (const action of ["open", "close"]) {
+            const sound = new Audio(`sound_effects/${name}_${action}.ogg`);
+            sound.preload = "auto";
+            sound.volume = 0.6;
+            sounds[action] = sound;
+        }
+        return sounds;
+    }
+
     // Wall above the doorway
     function addLintel(x, z, width, depth) {
         const lintel = new THREE.Mesh(
@@ -40,6 +51,8 @@ export function createDoors(scene, { surfaces, setSolid, addBarrier }) {
         doors.push({
             center: closed,
             playerOnly: true,
+            sounds: doorSounds("storage_door"),
+            opening: false,
             panels: [addPanel(geometry, material, closed, closed.clone().setZ(z - panelWidth))],
             collider: new THREE.Box3(
                 new THREE.Vector3(PARTITION_X - WALL_THICKNESS / 2, 0, z - width / 2),
@@ -76,6 +89,8 @@ export function createDoors(scene, { surfaces, setSolid, addBarrier }) {
         doors.push({
             center: new THREE.Vector3(x, 0, D),
             playerOnly: false,
+            sounds: doorSounds("entrance_door"),
+            opening: false,
             panels,
             collider: new THREE.Box3(
                 new THREE.Vector3(x - width / 2, 0, D - WALL_THICKNESS / 2),
@@ -93,10 +108,19 @@ export function createDoors(scene, { surfaces, setSolid, addBarrier }) {
 
     // `player` and each of `customers` are positions with x and z
     function update(dt, player, customers) {
+        if (dt <= 0) return;
         for (const door of doors) {
             const near = [player, ...(door.playerOnly ? [] : customers)].some(
                 (p) => Math.hypot(p.x - door.center.x, p.z - door.center.z) < OPEN_DISTANCE,
             );
+            if (near !== door.opening) {
+                door.opening = near;
+                const sound = near ? door.sounds.open : door.sounds.close;
+                const previous = near ? door.sounds.close : door.sounds.open;
+                previous.pause();
+                sound.currentTime = 0;
+                sound.play().catch((error) => console.warn("Door sound failed to play:", error));
+            }
             door.progress = THREE.MathUtils.clamp(door.progress + (near ? dt : -dt) / OPEN_TIME, 0, 1);
 
             const t = THREE.MathUtils.smoothstep(door.progress, 0, 1);

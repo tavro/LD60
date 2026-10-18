@@ -3,6 +3,10 @@ import * as THREE from "three";
 // Sign hanging over the counter with the takings and how many customers walked out, readable from
 // the shop floor and from behind the counter
 export function createRegister(scene, counterLoaded) {
+    const moneySound = new Audio("sound_effects/money.ogg");
+    moneySound.preload = "auto";
+    moneySound.volume = 0.6;
+
     const canvas = document.createElement("canvas");
     canvas.width = 512;
     canvas.height = 256;
@@ -46,6 +50,8 @@ export function createRegister(scene, counterLoaded) {
     function sell(price) {
         money += price;
         draw();
+        moneySound.currentTime = 0;
+        moneySound.play().catch((error) => console.warn("Money sound failed to play:", error));
     }
 
     function walkout() {
