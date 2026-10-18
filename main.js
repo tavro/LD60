@@ -115,7 +115,7 @@ const controls = createControls({
     onPlay: () => {
         if (tutorial.active || shift.day !== 0) return;
         shift.start(1);
-        setMenuOptions({ play: "▶ Back to work", tutorial: false, skip: false });
+        setMenuOptions({ play: "Back to work", tutorial: false, skip: false });
     },
     onPause: customers.reset,
 });
@@ -135,7 +135,7 @@ const tutorial = createTutorial({
     counterLoaded,
     onFinish: ({ skipped }) => {
         customers.clear();
-        setMenuOptions({ play: "▶ Back to work", tutorial: false, skip: false });
+        setMenuOptions({ play: "Back to work", tutorial: false, skip: false });
         if (skipped) {
             shift.start(1);
             controls.resume();
@@ -150,7 +150,7 @@ const tutorial = createTutorial({
                 "Keep shelves stocked, the floor clean and the line moving.",
                 "Hit the target to bank the money and buy upgrades.",
             ],
-            button: "▶ Start day 1",
+            button: "Start day 1",
             onContinue: () => {
                 shift.start(1);
                 controls.resume();
@@ -161,7 +161,7 @@ const tutorial = createTutorial({
 
 document.querySelector("#tutorial").addEventListener("click", () => {
     register.show({ day: 0, time: "Training" });
-    setMenuOptions({ play: "▶ Back to work", tutorial: false, skip: true });
+    setMenuOptions({ play: "Back to work", tutorial: false, skip: true });
     tutorial.begin();
     controls.resume();
 });
@@ -208,7 +208,7 @@ function showShiftResult(result) {
             `Overnight delivery: ${delivered} ${delivered === 1 ? "box" : "boxes"} for the storage room`,
         ],
         upgrades,
-        button: success ? `▶ Start day ${day + 1}` : "▶ Try again",
+        button: success ? `Start day ${day + 1}` : "Try again",
         onContinue: () => {
             shift.start(success ? day + 1 : day);
             controls.resume();

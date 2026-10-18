@@ -4,6 +4,7 @@ import { W, D, INNER, PARTITION_X } from "../scene/layout.js";
 import { randomBetween, isPartOf } from "./utils.js";
 import { randomImage } from "./print-images.js";
 import { playSfx } from "./sfx.js";
+import { createPixelPuddle } from "./puddles.js";
 
 export function createPrinterSystem({ scene, items, collides, tween, printerLoaded, retag }) {
     const { addItem, removeItem, firstHit } = items;
@@ -80,7 +81,7 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
         return mop;
     }
 
-    // Puddle: a few overlapping blobs, scaled with its size
+    // Puddle: pixel-art blobs that grow with its size
 
     const inkMaterial = new THREE.MeshStandardMaterial({
         color: 0x0b0b2a,
@@ -89,17 +90,12 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
         polygonOffsetFactor: -1,
     });
     const puddle = new THREE.Group();
-    for (const [x, z, radius] of [
-        [0, 0, 1],
-        [0.5, 0.3, 0.7],
-        [-0.4, 0.5, 0.6],
-        [0.2, -0.5, 0.55],
-    ]) {
-        const blob = new THREE.Mesh(new THREE.CircleGeometry(radius, 24), inkMaterial);
-        blob.rotation.x = -Math.PI / 2;
-        blob.position.set(x, 0, z);
-        puddle.add(blob);
-    }
+    const pixelPuddle = createPixelPuddle({
+        color: 0x0b0b2a,
+        blobs: [[0, 0, 1], [0.5, 0.3, 0.7], [-0.4, 0.5, 0.6], [0.2, -0.5, 0.55]],
+        maxSize: MAX_PUDDLE,
+    });
+    puddle.add(pixelPuddle.mesh);
     puddle.userData.shadow = "receive";
     scene.add(puddle);
 
@@ -107,7 +103,7 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
 
     function setPuddleSize(size) {
         puddleSize = THREE.MathUtils.clamp(size, 0, MAX_PUDDLE);
-        puddle.scale.setScalar(Math.max(puddleSize, 0.001));
+        pixelPuddle.setSize(puddleSize);
         puddle.visible = puddleSize > 0.15;
     }
     setPuddleSize(0);
@@ -224,7 +220,8 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
     }
 
     function drip() {
-        const drop = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), inkMaterial);
+        // A little cube, like a pixel of ink
+        const drop = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), inkMaterial);
         const from = printer.group.localToWorld(DRIP_FROM.clone());
         drop.position.copy(from);
         scene.add(drop);

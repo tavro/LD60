@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { PARTITION_X } from "../scene/layout.js";
+import { createPixelPuddle, footprintMesh } from "./puddles.js";
 
 // Messes on the shop floor: drinks customers spill, ink footprints the player tracks out of the
 // puddle by the printer, and loose boxes lying around. Each one makes customers lose patience
@@ -16,26 +17,17 @@ export function createMesses({ scene, items, physics, tween }) {
     const spills = [];
     const footprints = [];
 
-    const flat = { roughness: 0.1, polygonOffset: true, polygonOffsetFactor: -1 };
-    const spillMaterial = new THREE.MeshStandardMaterial({ color: 0x7a4a1c, ...flat });
-    const footprintMaterial = new THREE.MeshStandardMaterial({ color: 0x0b0b2a, ...flat });
-    const footprintGeometry = new THREE.CircleGeometry(0.2, 12).scale(1, 1.7, 1);
-
-    function onFloor(mesh) {
-        mesh.rotation.x = -Math.PI / 2;
-        mesh.position.y = 0.012;
-        return mesh;
-    }
-
-    // A few overlapping blobs, scaled with its size like the ink puddle
+    // Pixel-art blobs of coffee, shrinking as they're mopped, like the ink puddle
     function addSpill(position) {
         const spill = new THREE.Group();
-        for (const [x, z, radius] of [[0, 0, 0.6], [0.4, 0.2, 0.4], [-0.3, 0.3, 0.35]]) {
-            const blob = onFloor(new THREE.Mesh(new THREE.CircleGeometry(radius, 20), spillMaterial));
-            blob.position.x = x;
-            blob.position.z = z;
-            spill.add(blob);
-        }
+        const puddle = createPixelPuddle({
+            color: 0x6b3f18,
+            blobs: [[0, 0, 0.6], [0.4, 0.2, 0.4], [-0.3, 0.3, 0.35]],
+            maxSize: 1,
+        });
+        puddle.setSize(1);
+        spill.add(puddle.mesh);
+        spill.userData.puddle = puddle;
         spill.position.set(position.x, 0, position.z);
         spill.userData.shadow = "receive";
         spill.rotation.y = Math.random() * Math.PI * 2;
@@ -66,7 +58,7 @@ export function createMesses({ scene, items, physics, tween }) {
         if (distance < STRIDE) return;
 
         const footprint = new THREE.Group();
-        footprint.add(onFloor(new THREE.Mesh(footprintGeometry, footprintMaterial)));
+        footprint.add(footprintMesh("#0b0b2a"));
         // To the side of the direction of travel, pointing along it
         footprint.position.set(
             player.x + (dz / distance) * 0.25 * side,
@@ -98,6 +90,7 @@ export function createMesses({ scene, items, physics, tween }) {
     function remove(list, object) {
         list.splice(list.indexOf(object), 1);
         object.removeFromParent();
+        object.userData.puddle?.dispose();
     }
 
     // Called with what the mop was used on; cleans footprints around it and shrinks a spill there
@@ -113,7 +106,7 @@ export function createMesses({ scene, items, physics, tween }) {
         if (spill) {
             spill.userData.size -= SCRUB_AMOUNT;
             if (spill.userData.size < CLEAN_BELOW) remove(spills, spill);
-            else spill.scale.setScalar(spill.userData.size);
+            else spill.userData.puddle.setSize(spill.userData.size);
         }
 
         if (!scrubbed.length && !spill) return false;

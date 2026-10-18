@@ -13,11 +13,11 @@ export function createControls({ renderer, player, interact, onPlay = () => {}, 
     let stopped = false;
 
     function resume() {
-		playSfx("click");
+        playSfx("click");
         stopped = false;
         hideMenu();
         playing = true;
-		lockPointer();
+        lockPointer();
     }
 
     document.querySelector("#play").addEventListener("click", () => {
@@ -64,6 +64,17 @@ export function createControls({ renderer, player, interact, onPlay = () => {}, 
         if (e.button !== 0 || !playing) return;
         if (document.pointerLockElement === renderer.domElement) interact();
         else lockPointer();
+    });
+
+    // Other buttons do nothing in the game. Left to the browser, a right click opens its menu and a
+    // middle click starts scrolling, and either releases the mouse, which opens the pause menu
+    for (const event of ["contextmenu", "auxclick"]) {
+        document.addEventListener(event, (e) => {
+            if (playing) e.preventDefault();
+        });
+    }
+    document.addEventListener("mousedown", (e) => {
+        if (playing && e.button !== 0) e.preventDefault();
     });
     window.addEventListener("mousemove", (e) => {
         if (document.pointerLockElement !== renderer.domElement) return;

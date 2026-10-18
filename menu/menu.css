@@ -35,7 +35,7 @@ canvas {
   background: #f4f4ef;
   border: 6px solid #222;
   box-shadow: 10px 10px 0 rgba(0, 0, 0, 0.35);
-  transform: rotate(-1.5deg);
+  background-clip: padding-box;
 }
 
 .game-menu [hidden] {

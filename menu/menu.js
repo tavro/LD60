@@ -2,6 +2,7 @@ import menuHtml from "./menu.html?raw";
 import { settings } from "../settings.js";
 import { playSfx } from "../game/sfx.js";
 import "./menu.css";
+import "./icons.js";
 
 document.body.insertAdjacentHTML("beforeend", menuHtml);
 
