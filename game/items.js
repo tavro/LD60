@@ -151,7 +151,8 @@ export function createItemSystem({
         raycaster.far = far;
         const targets = [...surfaces, ...items.filter((item) => item !== held && !item.userData.carrier)];
         targets.push(...getExtraTargets());
-        return raycaster.intersectObjects(targets, true)[0];
+        // Only faces count, not lines like the glass door's frame, which have no normal to land on
+        return raycaster.intersectObjects(targets, true).find((hit) => hit.face);
     }
 
     function lookHit() {

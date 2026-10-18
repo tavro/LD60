@@ -16,7 +16,12 @@ export function shiftStartProblems({ delivery, messes, printer }) {
         const list = left.length > 1 ? `${left.slice(0, -1).join(", ")} and ${left.at(-1)}` : left[0];
         problems.push(`Still in the shop: ${list}. Mop the floor and put products on shelves.`);
     }
-    if (printer.puddle.visible) problems.push("Mop up the ink puddle by the printer.");
+    // Mopping can't keep up with a leak, so the cartridge has to be swapped first
+    if (printer.isLeaking()) {
+        problems.push("The printer is leaking. Drop a new ink cartridge on it to stop the leak, then mop up the ink.");
+    } else if (printer.puddle.visible) {
+        problems.push("Mop up the ink puddle by the printer.");
+    }
     return problems;
 }
 

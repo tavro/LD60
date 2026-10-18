@@ -65,7 +65,8 @@ export function createMesses({ scene, items, physics }) {
             0,
             player.z - (dx / distance) * 0.25 * side,
         );
-        footprint.rotation.y = Math.atan2(dx, dz);
+        // The print's toe is towards -z when unturned
+        footprint.rotation.y = Math.atan2(-dx, -dz);
         footprint.userData.shadow = "receive";
         scene.add(footprint);
         footprints.push(footprint);

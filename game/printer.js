@@ -373,5 +373,10 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
         printer.leakIn = randomBetween(...LEAK_DELAY);
     }
 
-    return { initialize, update: updatePrinter, puddle, handleDrop, tryScrub, inInk, refill, stats };
+    // Still dripping, which only a new cartridge stops
+    function isLeaking() {
+        return printer.leaking && printer.ink > 0;
+    }
+
+    return { initialize, update: updatePrinter, puddle, handleDrop, tryScrub, inInk, refill, isLeaking, stats };
 }

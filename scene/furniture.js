@@ -121,7 +121,8 @@ export function createFurniture({ spawn, shelfSlots, placeBox, spawnShelf }) {
         storageSlots.filter((slot) => slot.stock.label === label).length,
     ]));
 
-    // Shop shelves, where customers take what they buy. Each starts with a few boxes of its item
+    // Shop shelves, where customers take what they buy. Each starts with a few boxes of its item,
+    // all with the right price, since only deliveries come with wrong stickers
     const shopShelves = [];
 
     function spawnShopShelf(options, stock) {
@@ -129,7 +130,7 @@ export function createFurniture({ spawn, shelfSlots, placeBox, spawnShelf }) {
         const count = START_STOCK[0] + Math.floor(Math.random() * (START_STOCK[1] - START_STOCK[0] + 1));
         for (const slot of shuffled(shelfSlots(options)).slice(0, count)) {
             const twist = (Math.random() * 2 - 1) * SLOT_TWIST;
-            placeBox({ ...slot, rotation: slot.rotation + twist, stock });
+            placeBox({ ...slot, rotation: slot.rotation + twist, stock, tagPrice: stock.price });
         }
         shopShelves.push(spawnShelf(options, stock));
     }
