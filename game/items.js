@@ -1,8 +1,14 @@
 import * as THREE from "three";
 
-export function createItemSystem({ scene, camera, player, surfaces, getExtraTargets, onDrop, onMopUse }) {
+export function createItemSystem({ scene, camera, player, surfaces, slots, getExtraTargets, onDrop, onMopUse, onUse, onGive }) {
     const REACH = 6;
     const DROP_DISTANCE = 1.5;
+    // Items this close to the crosshair (in radians) count as aimed at, so they're easier to grab
+    const AIM_ANGLE = 0.15;
+    // Boxes put down within this distance of a free shelf spot snap into it, facing out
+    const SNAP_DISTANCE = 1.5;
+    // Up to this much random turn (in radians) on boxes put in a shelf, so rows don't look too neat
+    const SLOT_TWIST = 0.2;
     // Where held items sit relative to the camera. The mop is held head down, leaning away
     const HOLD = {
         default: { position: new THREE.Vector3(1, -1.2, -2.5), rotation: new THREE.Euler() },
@@ -33,6 +39,21 @@ export function createItemSystem({ scene, camera, player, surfaces, getExtraTarg
 
     let held = null;
     let target = null;
+    let heldSize = new THREE.Vector3();
+
+    // Outline showing where the held item will land
+    const ghostGeometry = new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0);
+    const ghost = new THREE.Mesh(
+        ghostGeometry,
+        new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.15, depthWrite: false }),
+    );
+    ghost.add(new THREE.LineSegments(
+        new THREE.EdgesGeometry(ghostGeometry),
+        new THREE.LineBasicMaterial({ color: 0xffffff }),
+    ));
+    ghost.name = "drop-ghost";
+    ghost.visible = false;
+    scene.add(ghost);
 
     function itemOf(object) {
         while (object && !object.userData.isItem) object = object.parent;
@@ -59,9 +80,32 @@ export function createItemSystem({ scene, camera, player, surfaces, getExtraTarg
         });
     }
 
+    // The item under the crosshair, or failing that the one closest to it that isn't behind
+    // whatever the crosshair is on
+    function aimedItem() {
+        const hit = lookHit();
+        const direct = hit ? itemOf(hit.object) : null;
+        if (direct) return direct;
+
+        const { origin, direction } = raycaster.ray;
+        const reach = Math.min(hit ? hit.distance + 1 : REACH, REACH);
+        let best = null;
+        let bestAngle = AIM_ANGLE;
+        for (const item of items) {
+            if (item.userData.carrier || !item.visible) continue;
+            const toItem = new THREE.Box3().setFromObject(item).getCenter(new THREE.Vector3()).sub(origin);
+            if (toItem.length() > reach) continue;
+            const angle = toItem.angleTo(direction);
+            if (angle < bestAngle) {
+                best = item;
+                bestAngle = angle;
+            }
+        }
+        return best;
+    }
+
     function updateTarget() {
-        const hit = held ? null : lookHit();
-        const item = hit ? itemOf(hit.object) : null;
+        const item = held ? null : aimedItem();
         if (item === target) return;
 
         if (target) setHighlight(target, false);
@@ -76,6 +120,11 @@ export function createItemSystem({ scene, camera, player, surfaces, getExtraTarg
         item.userData.onTaken?.();
         item.userData.onTaken = null;
 
+        // Measured unrotated, for the landing outline
+        item.rotation.set(0, 0, 0);
+        item.updateMatrixWorld(true);
+        heldSize = new THREE.Box3().setFromObject(item).getSize(new THREE.Vector3());
+
         const hold = HOLD[item.userData.kind] ?? HOLD.default;
         camera.add(item);
         item.position.copy(hold.position);
@@ -83,15 +132,37 @@ export function createItemSystem({ scene, camera, player, surfaces, getExtraTarg
         held = item;
     }
 
-    // Where the held item ends up (a hit with the point and the object it lands on): on the surface
-    // being looked at if it faces up, otherwise it falls straight down from just in front of what's
-    // being looked at (e.g. onto the board in front of a shelf's back panel), or from a little in
-    // front of the player when looking at nothing in reach
+    // The free shelf spot nearest the point, for a held box
+    function snapToSlot(point) {
+        if (held.userData.kind !== "box") return null;
+        const taken = items
+            .filter((item) => item !== held && !item.userData.carrier)
+            .map((item) => item.getWorldPosition(new THREE.Vector3()));
+
+        let best = null;
+        let bestDistance = SNAP_DISTANCE;
+        for (const slot of slots) {
+            const distance = slot.position.distanceTo(point);
+            if (distance >= bestDistance) continue;
+            if (taken.some((position) => position.distanceTo(slot.position) < 0.5)) continue;
+            best = slot;
+            bestDistance = distance;
+        }
+        return best && { point: best.position.clone(), rotation: best.rotation, slot: best };
+    }
+
+    // Where the held item ends up, as the point and optionally its rotation: in a shelf spot near
+    // what's being looked at for boxes, on the surface being looked at if it faces up, otherwise it
+    // falls straight down from just in front of what's being looked at (e.g. onto the board in front
+    // of a shelf's back panel), or from a little in front of the player when looking at nothing in
+    // reach
     function landing() {
         const forward = new THREE.Vector3(-Math.sin(player.yaw), 0, -Math.cos(player.yaw));
         let above;
 
         const hit = lookHit();
+        const snapped = hit && snapToSlot(hit.point);
+        if (snapped) return snapped;
         if (hit) {
             // The face's own normal, since the interpolated one is tilted on bevelled edges
             const normal = hit.face.normal.clone().transformDirection(hit.object.matrixWorld);
@@ -109,13 +180,14 @@ export function createItemSystem({ scene, camera, player, surfaces, getExtraTarg
 
     function drop() {
         const aimed = lookHit();
-        const { point } = landing();
+        const { point, rotation = player.yaw, slot } = landing();
         const item = held;
         held = null;
 
         scene.add(item);
         item.position.copy(point);
-        item.rotation.set(0, player.yaw, 0);
+        const twist = slot ? (Math.random() * 2 - 1) * SLOT_TWIST : 0;
+        item.rotation.set(0, rotation + twist, 0);
 
         onDrop(item, aimed);
     }
@@ -126,17 +198,35 @@ export function createItemSystem({ scene, camera, player, surfaces, getExtraTarg
             if (onMopUse(held, hit)) return;
         }
 
+        // Handing the held item to someone, like a print to the customer who ordered it. They
+        // can also refuse it, which keeps it in hand
+        const given = held && onGive(held);
+        if (given === "given") {
+            held.removeFromParent();
+            removeItem(held);
+            held = null;
+        }
+        if (given) return;
+
+        // Clicking something that isn't picked up, like a customer's box on the counter
+        if (!held && onUse(target ? { object: target } : lookHit())) return;
+
         if (held) drop();
         else if (target) pickUp(target);
     }
 
-    function findShelfItem(shelf, row) {
+    // A box with the given label (or any box, for null) standing on the shelf, that nobody has
+    // claimed
+    function findShelfItem(shelf, label) {
         shelf.updateWorldMatrix(true, false);
+        const { x: width, y: height, z: depth } = shelf.userData.size;
         return items.find((item) => {
-            if (item === held || item.userData.carrier || item.userData.kind !== "box" || !item.visible) return false;
+            if (item === held || item.userData.carrier || item.userData.forSale) return false;
+            if (item.userData.kind !== "box" || !item.visible) return false;
+            if (label !== null && item.userData.label !== label) return false;
             const local = shelf.worldToLocal(item.getWorldPosition(new THREE.Vector3()));
-            return Math.abs(local.x) <= 1.8 && Math.abs(local.z) <= 0.8 &&
-                Math.abs(local.y - (0.1 + (row - 1) * 1.5)) <= 0.35;
+            return Math.abs(local.x) <= width / 2 && Math.abs(local.z) <= depth / 2 &&
+                local.y >= 0 && local.y <= height;
         });
     }
 
@@ -160,5 +250,22 @@ export function createItemSystem({ scene, camera, player, surfaces, getExtraTarg
         delete item.userData.carrier;
     }
 
-    return { addItem, removeItem, firstHit, interact, update: updateTarget, findShelfItem, takeForNPC, placeFromNPC };
+    function updateGhost() {
+        ghost.visible = held !== null && held.userData.kind !== "mop";
+        if (!ghost.visible) return;
+        const { point, rotation = player.yaw } = landing();
+        ghost.position.copy(point);
+        ghost.rotation.set(0, rotation, 0);
+        ghost.scale.copy(heldSize);
+    }
+
+    function update() {
+        updateTarget();
+        updateGhost();
+    }
+
+    return {
+        addItem, removeItem, firstHit, interact, update, findShelfItem, takeForNPC, placeFromNPC,
+        list: () => items,
+    };
 }

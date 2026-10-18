@@ -1,51 +1,59 @@
 import * as THREE from "three";
 
+// Speech bubbles over NPCs' heads, one per NPC, that fade after a few seconds
 export function createNPCSpeech() {
-    let bubble;
-    let remaining = 0;
+    const bubbles = new Map();
 
-    function clear() {
+    function clear(npc) {
+        const bubble = bubbles.get(npc);
         if (!bubble) return;
-        bubble.removeFromParent();
-        bubble.material.map.dispose();
-        bubble.material.dispose();
-        bubble = undefined;
+        bubble.sprite.removeFromParent();
+        bubble.sprite.material.map.dispose();
+        bubble.sprite.material.dispose();
+        bubbles.delete(npc);
     }
 
-    function say(npc, text) {
-        clear();
+    function say(npc, text, duration = 4) {
+        clear(npc);
+        const font = "bold 48px sans-serif";
         const canvas = document.createElement("canvas");
-        canvas.width = 256;
-        canvas.height = 128;
         const context = canvas.getContext("2d");
+        context.font = font;
+        canvas.width = Math.max(160, Math.ceil(context.measureText(text).width) + 56);
+        canvas.height = 128;
+
+        const middle = canvas.width / 2;
         context.fillStyle = "white";
         context.beginPath();
-        context.roundRect(4, 4, 248, 96, 18);
+        context.roundRect(4, 4, canvas.width - 8, 96, 18);
         context.fill();
         context.beginPath();
-        context.moveTo(108, 98);
-        context.lineTo(128, 124);
-        context.lineTo(148, 98);
+        context.moveTo(middle - 20, 98);
+        context.lineTo(middle, 124);
+        context.lineTo(middle + 20, 98);
         context.fill();
         context.fillStyle = "#222";
-        context.font = "bold 48px sans-serif";
+        context.font = font;
         context.textAlign = "center";
         context.textBaseline = "middle";
-        context.fillText(text, 128, 52);
+        context.fillText(text, middle, 52);
+
         const texture = new THREE.CanvasTexture(canvas);
         texture.colorSpace = THREE.SRGBColorSpace;
-        bubble = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false }));
-        bubble.position.set(0, 5.5, 0);
-        bubble.scale.set(3, 1.5, 1);
-        bubble.renderOrder = 10;
-        npc.add(bubble);
-        remaining = 4;
+        const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false }));
+        sprite.position.set(0, 5.5, 0);
+        sprite.scale.set(3 * canvas.width / 256, 1.5, 1);
+        sprite.renderOrder = 10;
+        npc.add(sprite);
+        bubbles.set(npc, { sprite, remaining: duration });
     }
 
     function update(dt) {
-        remaining -= dt;
-        if (remaining <= 0) clear();
+        for (const [npc, bubble] of bubbles) {
+            bubble.remaining -= dt;
+            if (bubble.remaining <= 0) clear(npc);
+        }
     }
 
-    return { say, update, dispose: clear };
+    return { say, update, clear };
 }

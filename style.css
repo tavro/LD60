@@ -28,17 +28,3 @@ body {
   /* Above the canvas, which menu.css puts at z-index 0 */
   z-index: 1;
 }
-
-#hud {
-  position: fixed;
-  top: 12px;
-  left: 12px;
-  font: 16px/1.2 monospace;
-  text-shadow: 0 1px 2px #000;
-  pointer-events: none;
-  z-index: 1;
-}
-
-#hud.alert {
-  color: #f55;
-}

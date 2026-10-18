@@ -1,12 +1,12 @@
 import * as THREE from "three";
 
-export function createNPC({ id = "npc-1" } = {}) {
+export function createNPC({ id = "npc-1", shirtColor = 0x447abb } = {}) {
     const npc = new THREE.Group();
     npc.name = id;
     npc.userData.id = id;
 
     const skin = new THREE.MeshStandardMaterial({ color: 0xdca47d });
-    const shirt = new THREE.MeshStandardMaterial({ color: 0x447abb });
+    const shirt = new THREE.MeshStandardMaterial({ color: shirtColor });
     const trousers = new THREE.MeshStandardMaterial({ color: 0x303b50 });
     const shoes = new THREE.MeshStandardMaterial({ color: 0x252525 });
     const eyes = new THREE.MeshStandardMaterial({ color: 0x222222 });
@@ -57,12 +57,4 @@ export function createNPC({ id = "npc-1" } = {}) {
     }
 
     return npc;
-}
-
-export function addNPCs(scene) {
-    const npc = createNPC();
-    // Open aisle between the central shelves and checkout, facing the player's start.
-    npc.position.set(10, 0, 3);
-    scene.add(npc);
-    return [npc];
 }

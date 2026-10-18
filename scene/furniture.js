@@ -1,11 +1,12 @@
-import { W, INNER, WALL_THICKNESS } from "./layout.js";
+import { W, INNER, WALL_THICKNESS, PARTITION_X } from "./layout.js";
+import { STOCK } from "../game/stock.js";
 
 // Shelves are open on local +Z; rotate that side towards the aisle.
 const FACE_UP = Math.PI;
 const FACE_LEFT = -Math.PI / 2;
 const FACE_RIGHT = Math.PI / 2;
 
-export function createFurniture({ spawn, shelfSlots, restock }) {
+export function createFurniture({ spawn, shelfSlots, placeBox, restock, spawnShelf }) {
     const PRINTER = { x: -12, z: -INNER + 1.2 };
     const printerLoaded = spawn("printer", PRINTER);
 
@@ -16,21 +17,40 @@ export function createFurniture({ spawn, shelfSlots, restock }) {
         ...[-16, -12, -8].map((x) => ({ x, z: INNER - 1, rotation: FACE_UP })),
     ];
     RESTOCK_SHELVES.forEach((shelf, i) => {
-        spawn("shelf", shelf);
-        for (const slot of shelfSlots(shelf)) restock({ ...slot, label: `Item ${i + 1}` });
+        spawnShelf(shelf, STOCK[i]);
+        for (const slot of shelfSlots(shelf)) restock({ ...slot, stock: STOCK[i] });
     });
 
-    // Double-sided shelf island in the middle
-    let firstCustomerShelfLoaded;
-    for (const z of [-6, -2, 2, 6]) {
-        const shelfLoaded = spawn("shelf", { x: 3, z, rotation: FACE_LEFT });
-        firstCustomerShelfLoaded ??= shelfLoaded;
-        spawn("shelf", { x: 5, z, rotation: FACE_RIGHT });
+    // Shop shelves, where customers take what they buy. Each starts with one row of its item
+    const shopShelves = [];
+
+    function spawnShopShelf(options, stock) {
+        for (const slot of shelfSlots(options).filter((slot) => slot.level === 1)) placeBox({ ...slot, stock });
+        shopShelves.push(spawnShelf(options, stock));
     }
 
-    // Shelf along the right wall
-    for (const z of [-9, -5]) {
-        spawn("shelf", { x: W - WALL_THICKNESS / 2 - 1, z, rotation: FACE_LEFT });
+    // Double-sided shelf island in the middle, where each row holds one item on both sides, from
+    // Item 1 at the top
+    [-6, -2, 2, 6].forEach((z, i) => {
+        spawnShopShelf({ x: 3, z, rotation: FACE_LEFT }, STOCK[i]);
+        spawnShopShelf({ x: 5, z, rotation: FACE_RIGHT }, STOCK[i]);
+    });
+
+    // Shelf along the right wall, for Item 1 and 2 again
+    [-9, -5].forEach((z, i) => {
+        spawnShopShelf({ x: W - WALL_THICKNESS / 2 - 1, z, rotation: FACE_LEFT }, STOCK[i]);
+    });
+
+    // Bought as upgrades: shelves along the shop side of the partition
+    const EXTRA_SHELVES = [
+        { x: PARTITION_X + WALL_THICKNESS / 2 + 1, z: 3, rotation: FACE_RIGHT, stock: STOCK[2] },
+        { x: PARTITION_X + WALL_THICKNESS / 2 + 1, z: 8, rotation: FACE_RIGHT, stock: STOCK[3] },
+    ];
+
+    function addExtraShelf(index) {
+        const { stock, ...options } = EXTRA_SHELVES[index];
+        spawnShopShelf(options, stock);
+        return shopShelves.at(-1);
     }
 
     // Desk in the bottom right corner: counter along the room side, with two legs reaching towards the
@@ -46,5 +66,5 @@ export function createFurniture({ spawn, shelfSlots, restock }) {
         ],
     });
 
-    return { printerLoaded, firstCustomerShelfLoaded, counterLoaded };
+    return { printerLoaded, shopShelvesLoaded: Promise.all(shopShelves), counterLoaded, addExtraShelf };
 }

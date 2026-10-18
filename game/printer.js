@@ -1,14 +1,16 @@
 import * as THREE from "three";
-import { W, D, INNER } from "../scene/layout.js";
+import { W, D, INNER, PARTITION_X } from "../scene/layout.js";
 import { randomBetween, isPartOf } from "./utils.js";
 import { randomImage } from "./print-images.js";
 
-export function createPrinterSystem({ scene, items, collides, tween, printerLoaded, hud }) {
+export function createPrinterSystem({ scene, items, collides, tween, printerLoaded, retag }) {
     const { addItem, removeItem, firstHit } = items;
     const DOWN = new THREE.Vector3(0, -1, 0);
 
     const PAPER_SIZE = [0.8, 0.02, 1.13];
     const PAPER_COUNT = 10;
+    // Papers lie around the printer, this far from it
+    const PAPER_SPREAD = [1.5, 5];
 
     // Printer model space, after centering: the slot runs the full width at y 2-2.25, from z -0.6 to
     // the front at z 1.1
@@ -20,12 +22,16 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
     const PUDDLE_AT = new THREE.Vector3(0.8, 0.02, 1.6);
 
     const INK_PER_PRINT = 0.1;
-    const LEAK_RATE = 0.02;
-    const LEAK_DELAY = [20, 45];
+    const INK_PER_STICKER = 0.05;
+    const LEAK_RATE = 0.008;
+    const LEAK_DELAY = [90, 150];
     const DRIP_INTERVAL = 0.3;
-    const PUDDLE_GROWTH = 0.08;
+    const PUDDLE_GROWTH = 0.03;
     const MAX_PUDDLE = 3;
     const SCRUB_AMOUNT = 0.5;
+    // How far past the puddle's edge the mop still reaches, and the size below which it's gone
+    const SCRUB_MARGIN = 1.2;
+    const CLEAN_BELOW = 0.3;
 
     // Dropped from above onto whatever is there, so it lands on top if something was left on the spot
     const CARTRIDGE_SPOT = new THREE.Vector3(-8, 10, -INNER + 0.8);
@@ -102,13 +108,17 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
         addItem(cartridge, "cartridge", spawnCartridge);
     }
 
+    // On the storage room floor around the printer
     function scatterPapers() {
+        const { x: printerX, z: printerZ } = printer.group.position;
         for (let i = 0; i < PAPER_COUNT; i++) {
             let x, z;
             do {
-                x = randomBetween(-W + 1.5, W - 1.5);
-                z = randomBetween(-D + 1.5, D - 1.5);
-            } while (collides(x, z));
+                const angle = randomBetween(0, Math.PI * 2);
+                const distance = randomBetween(...PAPER_SPREAD);
+                x = printerX + Math.cos(angle) * distance;
+                z = printerZ + Math.sin(angle) * distance;
+            } while (x < -W + 1.5 || x > PARTITION_X - 1.5 || Math.abs(z) > D - 1.5 || collides(x, z));
 
             const paper = makePaper();
             paper.position.set(x, 0, z);
@@ -153,13 +163,29 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
             page.position.z = THREE.MathUtils.lerp(SLOT_START_Z, SLOT_END_Z, t);
         });
 
+        // Then it slips off the end and flutters down to the floor in front of the printer
+        const landX = randomBetween(-0.4, 0.4);
+        const landZ = SLOT_END_Z + randomBetween(0.4, 0.9);
+        const spin = randomBetween(-0.8, 0.8);
+        await tween(0.7, (t) => {
+            page.position.set(landX * t, SLOT_Y * (1 - t * t), THREE.MathUtils.lerp(SLOT_END_Z, landZ, t));
+            page.rotation.set(Math.sin(t * Math.PI) * 0.4, spin * t, 0);
+        });
+
         scene.attach(page);
         addItem(page, inked ? "print" : "paper");
     }
 
-    // Called with an item that was just dropped while looking at the printer
+    // Called with an item that was just dropped while looking at the printer. Boxes get a new
+    // sticker with the right price, when there's ink for it, and stay on top
     function feedPrinter(item) {
         const kind = item.userData.kind;
+        if (kind === "box" && printer.ink >= INK_PER_STICKER) {
+            item.position.copy(printer.group.localToWorld(PRINTER_TOP.clone()));
+            printer.ink -= INK_PER_STICKER;
+            retag(item);
+            tween(0.3, (t) => item.scale.setScalar(1 + Math.sin(t * Math.PI) * 0.15));
+        }
         if (kind === "paper" || kind === "cartridge") {
             item.position.copy(printer.group.localToWorld(PRINTER_TOP.clone()));
         }
@@ -202,15 +228,11 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
             }
         }
 
-        const status = `Printer ink ${Math.round(printer.ink * 100)}%${printer.leaking ? " — leaking!" : ""}`;
-        if (hud.textContent !== status) {
-            hud.textContent = status;
-            hud.classList.toggle("alert", printer.leaking);
-        }
     }
 
     function scrub(mop) {
-        setPuddleSize(puddleSize - SCRUB_AMOUNT);
+        const size = puddleSize - SCRUB_AMOUNT;
+        setPuddleSize(size < CLEAN_BELOW ? 0 : size);
         tween(0.25, (t) => {
             mop.rotation.z = Math.sin(t * Math.PI * 2) * 0.3;
         });
@@ -220,11 +242,19 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
         if (printer.group && isPartOf(hit?.object, printer.group)) feedPrinter(item);
     }
 
+    // Anywhere on or near the puddle; its blobs reach about 1.5 times its size from the middle
     function tryScrub(mop, hit) {
-        if (!hit || !isPartOf(hit.object, puddle)) return false;
+        if (!hit || !puddle.visible) return false;
+        const distance = Math.hypot(hit.point.x - puddle.position.x, hit.point.z - puddle.position.z);
+        if (distance > puddleSize * 1.5 + SCRUB_MARGIN) return false;
         scrub(mop);
         return true;
     }
 
-    return { initialize, update: updatePrinter, puddle, handleDrop, tryScrub };
+    // Whether that spot on the floor is in the ink puddle
+    function inInk(x, z) {
+        return puddle.visible && Math.hypot(x - puddle.position.x, z - puddle.position.z) < puddleSize * 1.3;
+    }
+
+    return { initialize, update: updatePrinter, puddle, handleDrop, tryScrub, inInk };
 }

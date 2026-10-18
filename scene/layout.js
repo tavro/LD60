@@ -7,3 +7,8 @@ export const W = ROOM_WIDTH / 2;
 export const D = ROOM_DEPTH / 2;
 export const INNER = D - WALL_THICKNESS / 2;
 export const PARTITION_X = -4;
+
+// Doorways: one in the partition into the storage room, and the customer entrance in the bottom wall
+// by the desk. Wall ends reach WALL_THICKNESS / 2 into the opening, so the clear gap is a bit narrower
+export const STORAGE_DOOR = { z: -7.75, width: 3.5 };
+export const FRONT_DOOR = { x: 10, width: 3.5 };

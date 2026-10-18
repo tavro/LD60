@@ -40,6 +40,8 @@ export function createModelSpawner(scene, { addSolid }) {
             ).applyMatrix4(group.matrixWorld),
         );
 
+        group.userData.size = box.getSize(new THREE.Vector3());
+
         if (solid) addSolid(group, boxes);
         return group;
     }
