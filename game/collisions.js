@@ -48,5 +48,8 @@ export function createCollisionSystem() {
         bodies = list;
     }
 
-    return { colliders, barriers, surfaces, addSolid, setSolid, addBarrier, collides, bump, setBodies };
+    return {
+        colliders, barriers, surfaces, addSolid, setSolid, addBarrier, collides, bump, setBodies,
+        bodies: () => bodies(),
+    };
 }

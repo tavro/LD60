@@ -61,11 +61,29 @@ const MESSY = 3;
 const OVERCHARGE_PENALTY = 15;
 const ACCUSE_PENALTY = 10;
 const PRINT_PRICE = 10;
-// Customers keep this far apart from each other and the player, and step aside at these angles (in
-// radians) when someone's in the way. Two customers stuck on each other for SQUEEZE_AFTER seconds
+// Customers keep this far apart from each other and the player. They steer away from anyone within
+// AVOID_MARGIN of touching, passing on the right, and step aside at these angles (in radians) if
+// they'd still bump into someone. Two customers stuck on each other for SQUEEZE_AFTER seconds
 // squeeze past for SQUEEZE_TIME, so a jam never lasts; the player has to step aside themselves
 const BODY_RADIUS = 0.8;
-const SIDESTEPS = [0, 0.6, -0.6, 1.2, -1.2];
+// Pushed away from anyone within AVOID_MARGIN of touching. Someone actually in the way ahead, within
+// PASS_MARGIN, is passed on whichever side they're not on, so people slide past each other instead
+// of meeting nose to nose. STEER_RATE smooths the steering so it doesn't flicker
+const AVOID_MARGIN = 0.3;
+const AVOID_STRENGTH = 1.5;
+const PASS_MARGIN = 2.5;
+const PASS_STRENGTH = 2.5;
+const STEER_RATE = 6;
+const SIDESTEPS = [0, 0.5, -0.5, 1.1, -1.1];
+// How quickly they turn towards where they're heading, and how close counts as reaching a point
+const TURN_RATE = 8;
+const ARRIVE_DISTANCE = 0.15;
+// Seconds of trying to walk without getting anywhere before squeezing past people, and before
+// looking for another way
+const STUCK_SQUEEZE = 1;
+const STUCK_REPLAN = 3;
+// How often they check whether someone has since stopped in their way, and replan around them
+const ROUTE_CHECK_EVERY = 0.5;
 const SQUEEZE_AFTER = 1.5;
 const SQUEEZE_TIME = 1;
 const EXCUSE_EVERY = 4;
@@ -125,7 +143,8 @@ function listOf(wants) {
 }
 
 export function createCustomerController({
-    scene, camera, collides, bump, items, physics, shift, belt, messes, speech, shelvesLoaded, counterLoaded,
+    scene, camera, collides, bump, collisionBodies, items, physics, shift, belt, messes, speech, shelvesLoaded,
+    counterLoaded,
 }) {
     const { say } = speech;
     const customers = [];
@@ -148,51 +167,83 @@ export function createCustomerController({
         counter = loadedCounter;
     });
 
-    // Customers stay on the shop floor, out of the storage room
-    function clearSegment(from, to) {
+    // Customers stay on the shop floor, out of the storage room, and walk around `standing` ones
+    // (circles with x, z and radius)
+    function clearSegment(from, to, standing = []) {
         const steps = Math.max(1, Math.ceil(Math.hypot(to.x - from.x, to.z - from.z) / 0.1));
         for (let i = 1; i <= steps; i++) {
             const x = from.x + (to.x - from.x) * i / steps;
             const z = from.z + (to.z - from.z) * i / steps;
             if (x < PARTITION_X + RADIUS + 0.25 || x > W - RADIUS ||
                 Math.abs(z) > D - RADIUS || collides(x, z, RADIUS)) return false;
+            if (standing.some((other) => Math.hypot(x - other.x, z - other.z) < other.radius)) return false;
         }
         return true;
     }
 
-    // Breadth-first search over a half-unit grid; null when the target can't be reached
-    function findRoute(from, target) {
+    // The other customers standing still, as circles to keep clear of on the way somewhere
+    function standingAround(customer) {
+        if (!customer) return [];
+        return customers
+            .filter((other) => other !== customer && !other.moving)
+            .map((other) => ({
+                x: other.npc.position.x,
+                z: other.npc.position.z,
+                radius: bodyRadius(customer) + bodyRadius(other),
+            }));
+    }
+
+    // Breadth-first search over a half-unit grid, around customers standing still when it's for a
+    // customer; null when the target can't be reached
+    function findRoute(from, target, customer = null) {
+        const standing = standingAround(customer);
         const start = { x: from.x, z: from.z, parent: null };
         const queue = [start];
         const visited = new Set(["0,0"]);
         for (let index = 0; index < queue.length; index++) {
             const node = queue[index];
-            if (Math.hypot(node.x - target.x, node.z - target.z) <= 0.5 && clearSegment(node, target)) {
+            if (Math.hypot(node.x - target.x, node.z - target.z) <= 0.5 && clearSegment(node, target, standing)) {
                 const route = [target];
                 for (let step = node; step.parent; step = step.parent) route.push(step);
-                return route.reverse();
+                return straighten(from, route.reverse(), standing);
             }
             for (const [dx, dz] of [[0.5, 0], [-0.5, 0], [0, 0.5], [0, -0.5]]) {
                 const next = { x: node.x + dx, z: node.z + dz, parent: node };
                 const key = `${Math.round((next.x - start.x) * 2)},${Math.round((next.z - start.z) * 2)}`;
                 if (visited.has(key)) continue;
                 visited.add(key);
-                if (clearSegment(node, next)) queue.push(next);
+                if (clearSegment(node, next, standing)) queue.push(next);
             }
         }
         return null;
     }
 
+    // Drops the grid's zig-zag: from each point, heads straight for the furthest point along the
+    // route that can be reached in a straight line
+    function straighten(from, route, standing) {
+        const straight = [];
+        let anchor = from;
+        let i = 0;
+        while (i < route.length) {
+            let furthest = i;
+            while (furthest + 1 < route.length && clearSegment(anchor, route[furthest + 1], standing)) furthest++;
+            straight.push(route[furthest]);
+            anchor = route[furthest];
+            i = furthest + 1;
+        }
+        return straight;
+    }
+
     // Walks there, sliding along whatever's in the way if there's no route, then calls `arrive`
     function go(customer, target, facing = null) {
-        customer.route = findRoute(customer.npc.position, target) ?? [target];
+        customer.route = findRoute(customer.npc.position, target, customer) ?? [target];
         customer.facing = facing;
         customer.moving = true;
     }
 
     // Out through the front door, then gone
     function goOutside(customer) {
-        customer.route = [...(findRoute(customer.npc.position, INSIDE) ?? [INSIDE.clone()]), OUTSIDE.clone()];
+        customer.route = [...(findRoute(customer.npc.position, INSIDE, customer) ?? [INSIDE.clone()]), OUTSIDE.clone()];
         customer.moving = true;
         customer.facing = null;
     }
@@ -268,6 +319,8 @@ export function createCustomerController({
             blocked: 0,
             squeezing: 0,
             excuseIn: 0,
+            // Where they're turning to face, in radians around y
+            heading: Math.PI,
         });
     }
 
@@ -595,47 +648,104 @@ export function createCustomerController({
         if (!collides(startX + dx, startZ, RADIUS)) npc.position.x += dx;
         if (!collides(npc.position.x, startZ + dz, RADIUS)) npc.position.z += dz;
 
-        customer.walk.update(dt, Math.hypot(npc.position.x - startX, npc.position.z - startZ));
+        const moved = Math.hypot(npc.position.x - startX, npc.position.z - startZ);
+        customer.walk.update(dt, moved);
+        updateStuck(customer, Math.hypot(dx, dz), moved, dt);
 
         if (!customer.route.length && customer.moving) {
             customer.moving = false;
             if (customer.facing) {
-                npc.rotation.y = Math.atan2(customer.facing.x - npc.position.x, customer.facing.z - npc.position.z);
+                customer.heading = Math.atan2(customer.facing.x - npc.position.x, customer.facing.z - npc.position.z);
             }
             arrive(customer);
         }
+        turn(customer, dt);
     }
 
     function bodyRadius(customer) {
         return BODY_RADIUS * (customer.type.scale ?? 1);
     }
 
-    // Towards the next point on the route, or around whoever's in the way
+    // Towards the next point on the route, steering around whoever's near, and stepping aside or
+    // waiting when someone's right in the way
     function stepAlongRoute(customer, dt) {
         const { npc } = customer;
+        const position = npc.position;
         const next = customer.route[0];
-        const remaining = Math.hypot(next.x - npc.position.x, next.z - npc.position.z);
-        const step = Math.min(MOVE_SPEED * customer.type.speed * dt, remaining);
-        const towardX = remaining ? (next.x - npc.position.x) / remaining * step : 0;
-        const towardZ = remaining ? (next.z - npc.position.z) / remaining * step : 0;
+        const remaining = Math.hypot(next.x - position.x, next.z - position.z);
+        if (remaining < ARRIVE_DISTANCE) {
+            customer.route.shift();
+            return { dx: 0, dz: 0 };
+        }
         customer.squeezing = Math.max(customer.squeezing - dt, 0);
         customer.excuseIn -= dt;
+        recheckRoute(customer, dt);
 
+        const radius = bodyRadius(customer);
         const ignore = (body) => body.customer === customer || (customer.squeezing > 0 && !body.player);
+        let dirX = (next.x - position.x) / remaining;
+        let dirZ = (next.z - position.z) / remaining;
+
+        // Facing (fx, fz), the right-hand side is (-fz, fx)
+        const rightX = -dirZ;
+        const rightZ = dirX;
+        let steerX = dirX;
+        let steerZ = dirZ;
+        for (const body of collisionBodies()) {
+            if (ignore(body)) continue;
+            const toX = body.x - position.x;
+            const toZ = body.z - position.z;
+            const distance = Math.hypot(toX, toZ) || 0.001;
+            const touching = radius + body.radius;
+
+            if (distance < touching + AVOID_MARGIN) {
+                const weight = (1 - distance / (touching + AVOID_MARGIN)) * AVOID_STRENGTH;
+                steerX -= (toX / distance) * weight;
+                steerZ -= (toZ / distance) * weight;
+            }
+
+            // In the way: ahead, and close enough to the line of travel to bump into. Two people
+            // meeting both see the other on the same side of themselves, so they part consistently
+            const forward = toX * dirX + toZ * dirZ;
+            const lateral = toX * rightX + toZ * rightZ;
+            if (forward > 0 && forward < touching + PASS_MARGIN && Math.abs(lateral) < touching) {
+                const side = lateral > 0 ? -1 : 1;
+                const weight = (1 - forward / (touching + PASS_MARGIN)) * (1 - Math.abs(lateral) / touching) * PASS_STRENGTH;
+                steerX += rightX * side * weight;
+                steerZ += rightZ * side * weight;
+            }
+        }
+        const steer = Math.hypot(steerX, steerZ);
+        // Never turned around completely by someone in the way
+        if (steer > 0.001 && (steerX * dirX + steerZ * dirZ) / steer > -0.2) {
+            steerX /= steer;
+            steerZ /= steer;
+        } else {
+            steerX = dirX;
+            steerZ = dirZ;
+        }
+        // Eased in over a few frames
+        const ease = Math.min(STEER_RATE * dt, 1);
+        const smoothX = (customer.steerX ?? steerX) + (steerX - (customer.steerX ?? steerX)) * ease;
+        const smoothZ = (customer.steerZ ?? steerZ) + (steerZ - (customer.steerZ ?? steerZ)) * ease;
+        const smooth = Math.hypot(smoothX, smoothZ) || 1;
+        customer.steerX = smoothX / smooth;
+        customer.steerZ = smoothZ / smooth;
+        dirX = customer.steerX;
+        dirZ = customer.steerZ;
+
+        const step = Math.min(MOVE_SPEED * customer.type.speed * dt, remaining);
         let blocker = null;
         for (const angle of SIDESTEPS) {
             const cos = Math.cos(angle);
             const sin = Math.sin(angle);
-            const dx = towardX * cos - towardZ * sin;
-            const dz = towardX * sin + towardZ * cos;
-            const to = { x: npc.position.x + dx, z: npc.position.z + dz };
-            blocker = bump(npc.position, to, bodyRadius(customer), ignore);
+            const dx = (dirX * cos - dirZ * sin) * step;
+            const dz = (dirX * sin + dirZ * cos) * step;
+            blocker = bump(position, { x: position.x + dx, z: position.z + dz }, radius, ignore);
             if (blocker) continue;
 
             customer.blocked = 0;
-            if (remaining > 0.0001) npc.rotation.y = Math.atan2(dx, dz);
-            // Only a straight step can reach the point; a step aside leaves it for later
-            if (angle === 0 && step >= remaining) customer.route.shift();
+            customer.heading = Math.atan2(dx, dz);
             return { dx, dz };
         }
 
@@ -647,6 +757,46 @@ export function createCustomerController({
             customer.squeezing = SQUEEZE_TIME;
         }
         return { dx: 0, dz: 0 };
+    }
+
+    // Someone may have stopped on the way since the route was planned; if so, go around them. Not
+    // outside, where the route doesn't come from a search
+    function recheckRoute(customer, dt) {
+        customer.routeCheckIn = (customer.routeCheckIn ?? ROUTE_CHECK_EVERY) - dt;
+        if (customer.routeCheckIn > 0) return;
+        customer.routeCheckIn = ROUTE_CHECK_EVERY;
+
+        const target = customer.route.at(-1);
+        if (target.z > D || customer.npc.position.z > D) return;
+        if (clearSegment(customer.npc.position, customer.route[0], standingAround(customer))) return;
+        const route = findRoute(customer.npc.position, target, customer);
+        if (route) customer.route = route;
+    }
+
+    // Trying to walk but not getting anywhere, like pinned against the counter while going around
+    // someone: squeezes past people after a moment, and finds a new way if that doesn't help
+    function updateStuck(customer, intended, moved, dt) {
+        if (intended < 0.0001 || moved > intended * 0.2) {
+            customer.stuck = 0;
+            return;
+        }
+        customer.stuck = (customer.stuck ?? 0) + dt;
+        if (customer.stuck > STUCK_SQUEEZE && customer.squeezing === 0) customer.squeezing = SQUEEZE_TIME;
+        if (customer.stuck > STUCK_REPLAN && customer.route.length) {
+            const target = customer.route.at(-1);
+            const outside = target === OUTSIDE || target.z > D;
+            customer.route = outside
+                ? [...(findRoute(customer.npc.position, INSIDE, customer) ?? [INSIDE.clone()]), target]
+                : findRoute(customer.npc.position, target, customer) ?? [target];
+            customer.stuck = 0;
+        }
+    }
+
+    // Turns smoothly towards where they're heading
+    function turn(customer, dt) {
+        const rotation = customer.npc.rotation;
+        const difference = Math.atan2(Math.sin(customer.heading - rotation.y), Math.cos(customer.heading - rotation.y));
+        rotation.y += difference * Math.min(TURN_RATE * dt, 1);
     }
 
     function update(dt) {

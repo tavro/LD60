@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { settings } from "../settings.js";
 
 // Sign hanging over the counter with how the shift is going, readable from the shop floor and from
 // behind the counter
@@ -65,6 +66,7 @@ export function createRegister(scene, counterLoaded) {
 
     function playMoneySound() {
         moneySound.currentTime = 0;
+        moneySound.volume = 0.6 * settings.sfxVolume;
         moneySound.play().catch((error) => console.warn("Money sound failed to play:", error));
     }
 

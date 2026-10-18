@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { settings } from "../settings.js";
 import { W, D, INNER, PARTITION_X } from "../scene/layout.js";
 import { randomBetween, isPartOf } from "./utils.js";
 import { randomImage } from "./print-images.js";
@@ -169,6 +170,7 @@ export function createPrinterSystem({ scene, items, collides, tween, printerLoad
         //printer sound
         if (inked) {
             printerSound.currentTime = 0;
+            printerSound.volume = 0.6 * settings.sfxVolume;
             printerSound.play().catch((err) => console.warn("Printer sound failed to play:", err));
         }
 

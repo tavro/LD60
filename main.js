@@ -85,6 +85,7 @@ customers = createCustomerController({
     camera,
     collides: collisions.collides,
     bump: collisions.bump,
+    collisionBodies: collisions.bodies,
     items,
     physics,
     shift,

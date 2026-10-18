@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { settings } from "../settings.js";
 import { wallMaterial, tileWall } from "./walls.js";
 import { WALL_HEIGHT, WALL_THICKNESS, D, PARTITION_X, STORAGE_DOOR, FRONT_DOOR } from "./layout.js";
 
@@ -120,6 +121,7 @@ export function createDoors(scene, { surfaces, setSolid, addBarrier }) {
                 const previous = near ? door.sounds.close : door.sounds.open;
                 previous.pause();
                 sound.currentTime = 0;
+                sound.volume = 0.6 * settings.sfxVolume;
                 sound.play().catch((error) => console.warn("Door sound failed to play:", error));
             }
             door.progress = THREE.MathUtils.clamp(door.progress + (near ? dt : -dt) / OPEN_TIME, 0, 1);
