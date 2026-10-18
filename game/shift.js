@@ -68,6 +68,7 @@ export function createShift({ register, onEnd }) {
 
     function earn(amount) {
         takings += amount;
+        if (amount > 0) register.playMoneySound();
     }
 
     function walkout() {

@@ -17,7 +17,7 @@ export function createRegister(scene, counterLoaded) {
     // `status` has the day, the time left as text, takings and target, walkouts and the most allowed,
     // and whether it's rush hour. On day 0 it just shows `time` as a message
     function show({ day, time, takings, target, walkouts, maxWalkouts, rush }) {
-        const text = JSON.stringify([day, time, takings, target, walkouts, rush]);
+        const text = JSON.stringify([day, time, takings, target, walkouts, maxWalkouts, rush]);
         if (text === shown) return;
         shown = text;
 
@@ -63,17 +63,10 @@ export function createRegister(scene, counterLoaded) {
         scene.add(sign);
     });
 
-    function sell(price) {
-        money += price;
-        draw();
+    function playMoneySound() {
         moneySound.currentTime = 0;
         moneySound.play().catch((error) => console.warn("Money sound failed to play:", error));
     }
 
-    function walkout() {
-        walkouts++;
-        draw();
-    }
-
-    return { sell, walkout };
+    return { show, playMoneySound };
 }
