@@ -10,7 +10,7 @@ export const STOCK = [
     // `model` and `scale` are the item's model, if it isn't a placeholder box
     { label: "Mouse", color: "#c8322a", price: 3, model: "mouse", scale: 2 },
     { label: "Tape recorder", color: "#2a6fc8", price: 5, model: "tape_recorder", scale: 2.5 },
-    { label: "Item 3", color: "#2e9a48", price: 8 },
+    { label: "Phone", color: "#2e9a48", price: 8, model: "phone", scale: 2.5 },
     { label: "Item 4", color: "#e09a12", price: 12 },
 ];
 
